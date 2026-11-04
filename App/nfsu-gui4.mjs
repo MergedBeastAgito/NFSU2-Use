@@ -246,13 +246,15 @@ function paint() {
   // Live read first: the panel observes the game whether or not a driver is
   // running, and falls back to the last published state only if memory is gone.
   let car = {};
-  try { car = window.__readCar() || D.car || {}; } catch (e) { car = D.car || {}; }
+  let live = false;
+  try { const read = window.__readCar(); if (read) { car = read; live = true; } else car = D.car || {}; }
+  catch (e) { car = D.car || {}; }
 
   if (D.cache.__mode !== D.mode) {
     D.cache.__mode = D.mode;
     for (const m of MODES) S(btns[m.id], D.mode === m.id ? BTN_ON : BTN);
   }
-  set(modeEl, D.mode + (au.on ? ' · live' : ' · idle'));
+  set(modeEl, D.mode + (au.on ? ' · live' : ' · idle') + (live ? ' · reading' : ' · STALE'));
 
   // Power and pipe are read from the page every paint, so a click in another
   // tab or a driver flipping them is reflected without a message passing system.
