@@ -1,0 +1,36 @@
+[package]
+name = "nfsu-driver"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Drives the NFSU2 browser port from its own memory, through Agentic's browser port."
+build = "build.rs"
+
+# The layout is Agentic's: a library named Agentic<Name> under Source/, a thin
+# binary beside it, and one expression per file under Source/Script.
+[lib]
+name = "AgenticNfsuDriver"
+path = "Source/Library.rs"
+
+[[bin]]
+name = "nfsu-driver"
+path = "Source/Main.rs"
+
+# The facade is what a consumer names, and it is consumed as-is, never modified:
+# the path is absolute because the driver lives outside the Agentic tree.
+#
+# One dependency, and no internal package beside it - not even for the `script!`
+# macro this crate's expressions are baked with. The macro comes through the
+# facade (`pub use AgenticRuntime::script;`), which is what makes the facade a
+# facade: a consumer that had to name `agentic-runtime` for one macro would still
+# be pinned to the workspace's internal crate names.
+[dependencies]
+agentic-sdk = { path = "../Agentic/Crate/Sdk" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "signal"] }
+serde_json = "1"
+
+# The policy, the parser and the meter are pure, so they are tested without a
+# browser: `cargo test` runs them and never attaches to anything.
+[[test]]
+name = "decision"
+path = "Test/Decision.rs"

@@ -1,0 +1,24 @@
+{
+	"name": "@agentic/nfsu-driver",
+	"kind": "adapter",
+	"version": "0.1.0",
+	"provides": {
+		"port": "agentic.nfsu.drive",
+		"errors": ["browser-unavailable", "navigation-failed", "timeout"]
+	},
+	"requires": {
+		"ports": ["agentic.browse"]
+	},
+	"artefact": {
+		"entry": "Target/release/nfsu-driver",
+		"hash": null,
+		"runtime": "rust>=1.88"
+	},
+	"state": "holds-transport",
+	"cost": {
+		"coldMs": 40,
+		"warmMs": 3,
+		"network": false
+	},
+	"verify": "cargo run --release -- --attach <ws> --bind <target> --ticks 1"
+}

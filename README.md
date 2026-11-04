@@ -1,0 +1,115 @@
+# NFSU2 Agentic
+
+Drives the browser port of Need for Speed: Underground 2 from the game's own
+memory, through Agentic's browser port. A Rust crate does the driving; a small
+JavaScript harness does the seeing and the showing.
+
+---
+
+## What this is
+
+The port (`https://nfsu2.xyz/`) runs the original PC game recompiled to
+WebAssembly. Three facts make it drivable, and each was measured rather than
+assumed:
+
+- **The state is addressable.** The port's own source names the addresses:
+  `PlayersByNumber[0]` at `0x00d00000` in the wasm build, `car = [player+4]`,
+  position at `car+0x60`, heading `+0x40c` (u16, 65536 a turn), signed speed
+  `+0x430`, rpm `+0x440`, gear `+0x434`.
+- **Input can be injected from the page.** `session.input.key(code, true)` is a
+  single frame; re-asserted every 16 ms it holds a key. Measured: one call moved
+  the car 0.2 m, the interval moved it 11 m in 4 s.
+- **The route cue is visual.** The arrow is drawn, not published, so its screen
+  position is read from a captured frame - one cyan cluster, filtered against the
+  minimap corner and edge-hugging signage.
+
+Because the page injects its own input, Agentic needs no input verb: every step
+here is one `Evaluate`.
+
+---
+
+## Layout
+
+```
+driver/                     the Rust crate (an extension beside Agentic)
+  Source/Library.rs         crate doc, modules, re-exports
+  Source/Main.rs            the composition root and the loop
+  Source/Fn/                Decide, Cloudflare, Expressions, Gate
+  Source/Struct/            State, Decision, Budget
+  Source/Script/Expressions one .ts file per expression the page runs
+  build.rs                  compiles those scripts into OUT_DIR/Script
+  module.json               the manifest Agentic's vocabulary already reads
+  ADAPTER.md                the adapter surface Agentic does not have yet
+
+nfsu-drive4.mjs             the JS driver: duty-cycle steering, hysteretic throttle
+nfsu-gui4.mjs               HUD, observations, decisions, power and pipe switches
+nfsu-lane.mjs               the pipeline lane: SEND → RECEIVE → APPLIED → TRACE
+nfsu-bus.mjs                in-page tables and subscriptions (no .jsonl)
+nfsu-state.mjs              the memory reader, standalone
+analyze_frame.py            arrow detection and road-band motion
+```
+
+---
+
+## Running it
+
+The browser must be listening with the game tab open. Bind by target id:
+
+```sh
+WS=$(curl -s http://127.0.0.1:9222/json/version | python3 -c "import json,sys;print(json.load(sys.stdin)['webSocketDebuggerUrl'])")
+cd driver && cargo build --release
+./target/release/nfsu-driver --attach "$WS" --bind <target-id> --ticks 40 --target 45
+```
+
+The JavaScript harness is installed into the page, not run by it:
+
+```sh
+node nfsu-bus.mjs  <target-id> 9222
+node nfsu-gui4.mjs <target-id> 9222
+node nfsu-lane.mjs <target-id> 9222
+node nfsu-drive4.mjs <target-id> 9222 600 150
+```
+
+---
+
+## The decision model
+
+Cloudflare's Clef models are decision models, not chat models: they take a
+`state` and a schema of typed `questions` and return a probability for every
+allowed option. The chat-completions route rejects that shape with a 400, so the
+request goes to `/ai/run/@cf/cloudflare/<name>` with `{model, state, questions}`.
+
+| alias | model | price |
+| --- | --- | --- |
+| `clef-flash` | `@cf/cloudflare/clef-flash` | $0.038 / M input |
+| `clef` | `@cf/cloudflare/clef` | $0.24 / M input |
+
+One measured call: `action: throttle` at 0.5348, confidence 2.12 of 3, 343 input
+tokens and no output tokens - about $0.000013, which is why advice is throttled
+by `--every` rather than asked for on every tick.
+
+The token is read from the environment or `~/.env` and is never printed.
+
+---
+
+## Power and pipe
+
+Two switches live on the page, and any driver reads the same ones the person
+clicks:
+
+- **Power** - `user` (rules only, no model), `agentic` (rules drive, the model
+  argues), `model` (the model decides).
+- **Pipe** - `on` / `off`. Broken, no request is made at all, and the lane says
+  `pipe broken` rather than implying the model was consulted.
+
+---
+
+## Notes
+
+- The overlays are DOM, never in-game drawing, and only their buttons take
+  pointer events - a click anywhere else reaches the canvas.
+- This page's CSP blocks `<style>` elements outright, so every panel is styled
+  through `cssText`; a stylesheet silently does nothing here.
+- Screenshots flash a WebGPU canvas, so frames come from a screencast stream.
+- State and decisions live in in-page tables with subscriptions, not in a log
+  file.

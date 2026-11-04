@@ -1,0 +1,22 @@
+# Rust build output
+driver/target/
+**/*.rlib
+**/*.working
+
+# Scratch: frames, traces, probe artifacts
+*.jpg
+*.png
+*.jsonl
+*.json
+!driver/module.json
+
+# Node
+node_modules/
+
+# The game's own source, cloned for reference (not part of this repository)
+Module/
+
+# Editor and OS
+.DS_Store
+.idea/
+.vscode/
