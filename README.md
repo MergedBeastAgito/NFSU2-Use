@@ -52,8 +52,8 @@ App/                        the application: what runs
   nfsu-gui4.mjs             HUD, observations, decisions, power and pipe switches
   nfsu-lane.mjs             the pipeline lane: SEND → RECEIVE → APPLIED → TRACE
   nfsu-bus.mjs              in-page tables and subscriptions (no .jsonl)
-  nfsu-state.mjs            the memory reader, standalone
   analyze_frame.py          arrow detection and road-band motion
+  reader/                   a wasm module that reads the car from inside the game's memory
 
 Templates/                  data, read at runtime - never compiled in
   Observation.json          every field we can send, with its source address

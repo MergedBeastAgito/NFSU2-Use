@@ -43,6 +43,12 @@
 #![no_std]
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
+// The exports are `extern fn`, not `extern "C" fn`, because the workspace's
+// `rustfmt.toml` sets `force_explicit_abi = false` and removes the ABI on every
+// format - which is the same ABI either way (the default *is* `"C"`), so the
+// deprecation it leaves behind is the formatter's, not a defect here. Allowed at
+// the crate rather than repeated on eight functions.
+#![allow(missing_abi)]
 
 use core::{
 	arch::wasm32::{memory_size, unreachable},

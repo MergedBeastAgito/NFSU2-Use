@@ -1,6 +1,5 @@
-# Rust build output
-App/driver/target/
-App/reader/target/
+# Rust build output, for every crate here
+**/target/
 **/*.rlib
 **/*.working
 
