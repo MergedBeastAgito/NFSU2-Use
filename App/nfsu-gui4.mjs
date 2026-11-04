@@ -70,6 +70,37 @@ if (!D.hooked) {
 }
 D.push = (dir, key, extra) => { D.log.push({dir,key,extra}); if (D.log.length > 200) D.log.splice(0, D.log.length - 200) };
 
+// The panel reads the game itself, on its own timer. Before this it only showed
+// what a driver had published, so with no driver running every field was "?" -
+// an observation panel that needs a driver to observe is not an observation
+// panel.
+window.__readCar = () => {
+  const n = window.__nfsu2;
+  const mem = n && n.session && n.session.proc && n.session.proc.memory;
+  if (!mem) return null;
+  const dv = new DataView(mem.buffer);
+  const u32 = a => dv.getUint32(a, true), f32 = a => dv.getFloat32(a, true), u16 = a => dv.getUint16(a, true);
+  const player = u32(0x00d00000); const car = player ? u32(player + 4) : 0;
+  if (!car) return null;
+  const ctl = u32(car + 0x30);
+  return {
+    car,
+    kmh: Math.round(Math.abs(f32(car + 0x430)) * 3.6),
+    speed: +f32(car + 0x430).toFixed(2),
+    gear: dv.getInt8(car + 0x434),
+    rpm: Math.round(f32(car + 0x440)),
+    racetype: u32(0x0089e7b0),
+    steer: ctl ? +(dv.getInt16(ctl + 0x1e0, true) / 32767).toFixed(3) : 0,
+    yawRate: +f32(car + 0x110).toFixed(3),
+    heading: +(u16(car + 0x40c) / 65536 * 360).toFixed(1),
+    pos: [+f32(car + 0x60).toFixed(1), +f32(car + 0x64).toFixed(1), +f32(car + 0x68).toFixed(1)],
+    vel: [+f32(car + 0x70).toFixed(2), +f32(car + 0x74).toFixed(2), +f32(car + 0x78).toFixed(2)],
+    surface: [0,1,2,3].map(k => dv.getUint32(car + 0x394 + 4 * k, true)),
+    slip: [0,1,2,3,4,5,6,7].map(k => +f32(car + 0x3b4 + 4 * k).toFixed(2)),
+    grounded: [0,1,2,3].map(k => !!dv.getUint8(car + 0x390 + k)),
+  };
+};
+
 const BOX = 'position:fixed;z-index:2147483647;font:10px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;color:#9fe8ff;background:rgba(4,8,14,.84);border:1px solid rgba(120,220,255,.32);border-radius:6px;padding:6px 8px;text-shadow:0 0 6px rgba(80,200,255,.3)';
 const S = (el, css) => { el.style.cssText = css; return el };
 const mk = (id, css) => { const e = document.createElement('div'); e.id = id; S(e, css); document.documentElement.appendChild(e); return e };
@@ -211,7 +242,11 @@ const modeEl = obsHdr.querySelector('#ho-mode');
 function paint() {
   const n = window.__nfsu2, s = n && n.session, i = s && s.input, st = i && i.status ? i.status() : null;
   let stats = {}; try { stats = s && s.stats ? s.stats() : {} } catch (e) {}
-  const a = D.arrowData || {}, d = D.decision || {}, au = D.auto || {}, car = D.car || {};
+  const a = D.arrowData || {}, d = D.decision || {}, au = D.auto || {};
+  // Live read first: the panel observes the game whether or not a driver is
+  // running, and falls back to the last published state only if memory is gone.
+  let car = {};
+  try { car = window.__readCar() || D.car || {}; } catch (e) { car = D.car || {}; }
 
   if (D.cache.__mode !== D.mode) {
     D.cache.__mode = D.mode;
