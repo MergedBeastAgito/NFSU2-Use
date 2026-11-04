@@ -148,7 +148,7 @@ pub fn Advise(Car:&Car, Cue:Option<f64>, Name:&str) -> Result<Advice, Fail> {
 		.filter(|Token| !Token.is_empty())
 		.ok_or(Fail::NoToken)?;
 	let Account = env::var("CLOUDFLARE_ACCOUNT_ID").unwrap_or_else(|_| "REDACTED-ACCOUNT-ID".into());
-	let Url = format!("https://api.cloudflare.com/client/v4/accounts/{Account}/ai/run/@cf/cloudflare/{Bare}");
+	let URL = format!("https://api.cloudflare.com/client/v4/accounts/{Account}/ai/run/@cf/cloudflare/{Bare}");
 	let State = json!({
 		"speed_kmh": Car.Kmh.round(),
 		"gear": Car.Gear,
@@ -178,7 +178,7 @@ pub fn Advise(Car:&Car, Cue:Option<f64>, Name:&str) -> Result<Advice, Fail> {
 			}
 		}
 	});
-	Parse(&Ask(&Url, &Body.to_string(), &Token)?)
+	Parse(&Ask(&URL, &Body.to_string(), &Token)?)
 }
 
 /// One POST, with the token on stdin.
@@ -188,7 +188,7 @@ pub fn Advise(Car:&Car, Cue:Option<f64>, Name:&str) -> Result<Advice, Fail> {
 /// written as a curl config line is refused rather than quoted: a `"` or a
 /// newline in it would either break the line or start a new one, and both fail
 /// silently as a 401.
-fn Ask(Url:&str, Body:&str, Token:&str) -> Result<String, Fail> {
+fn Ask(URL:&str, Body:&str, Token:&str) -> Result<String, Fail> {
 	if Token.contains(['"', '\n', '\r']) {
 		return Err(Fail::NoToken);
 	}
@@ -203,7 +203,7 @@ fn Ask(Url:&str, Body:&str, Token:&str) -> Result<String, Fail> {
 			"\n%{http_code}",
 			"-X",
 			"POST",
-			Url,
+			URL,
 			"-H",
 			"Content-Type: application/json",
 			"-d",

@@ -88,7 +88,7 @@ async fn Run(Port:&Arc<dyn Adapter>, Request:&str, Ticks:u32, Interval:u64, Boun
 async fn main() -> Result<(), String> {
 	let Endpoint = Arg("--attach").ok_or("--attach <ws-url> is required")?;
 	let Bind = Arg("--bind").ok_or("--bind <target-id> is required")?;
-	let Url = Arg("--url").unwrap_or_else(|| "https://nfsu2.xyz/".into());
+	let URL = Arg("--url").unwrap_or_else(|| "https://nfsu2.xyz/".into());
 	let Ticks = Number("--ticks", 0u32);
 	let Interval = Number("--interval", 200u64);
 	let Policy = Policy {
@@ -110,7 +110,7 @@ async fn main() -> Result<(), String> {
 		Options::default(),
 	));
 	let Page = Browser
-		.Open(&Url, OpenOptions::Existing(Endpoint, Bind, Bounded.clone()))
+		.Open(&URL, OpenOptions::Existing(Endpoint, Bind, Bounded.clone()))
 		.await
 		.map_err(|Why| format!("attach failed: {}", Why.Message()))?;
 	println!(
