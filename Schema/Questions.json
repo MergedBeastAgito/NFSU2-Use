@@ -1,6 +1,39 @@
 {
 	"$comment": "Question templates, one per use case. Each is a Clef `questions` object: typed questions over the fields in Observation.json, with every allowed option written out so the model returns a probability per option rather than free text. Compose a request as {model, state, questions}.",
 	"version": 1,
+	"$lanes": "A lane is a request shape, not a request: each names the fields it sends and the templates it serves. A driving tick sends three numbers and gets an answer in one round trip; a recovery tick sends the wheel state; the full state is only for the slow lane. Sending everything every tick is the thing this avoids - it costs tokens, latency and money for fields the question never reads.",
+	"lanes": {
+		"drive": {
+			"fields": ["speed_kmh", "gear", "route_cue_x"],
+			"templates": ["freeroam.track_cue", "freeroam.cruise"],
+			"cadence": "every tick (150-250 ms)",
+			"why": "the fastest lane: three numbers, the question that decides steering and pace"
+		},
+		"recover": {
+			"fields": ["speed_kmh", "gear", "grounded", "surface"],
+			"templates": ["recovery.stuck", "surface.loss"],
+			"cadence": "only while stuck or slipping",
+			"why": "wheel state is only worth sending when a wheel is doing something"
+		},
+		"corner": {
+			"fields": ["speed_kmh", "heading_degrees", "route_cue_x", "yaw_rate"],
+			"templates": ["corner.entry"],
+			"cadence": "on approach to a turn",
+			"why": "yaw rate says how the car is actually rotating, which the cue alone cannot"
+		},
+		"race": {
+			"fields": ["speed_kmh", "gear", "racetype", "track", "route_cue_x"],
+			"templates": ["race.start"],
+			"cadence": "when racetype is 1 or 7",
+			"why": "the race lane adds the two fields that say a race is on at all"
+		},
+		"context": {
+			"fields": ["speed_kmh", "gear", "heading_degrees", "position", "velocity", "route_cue_x", "route_cue_pixels", "road_band_motion"],
+			"templates": ["traffic.ghost"],
+			"cadence": "rarely - a slow lane for judgement, not control",
+			"why": "the full state, for questions where latency does not matter"
+		}
+	},
 	"templates": {
 		"freeroam.cruise": {
 			"when": "free roam, no cue on screen, speed below target",

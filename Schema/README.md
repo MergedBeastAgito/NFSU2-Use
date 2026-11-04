@@ -76,6 +76,34 @@ visual. Until that is measured, this template is a template, not a controller.
 
 ---
 
+## Lanes
+
+A lane is a request *shape*: the fields a question actually reads, not all
+sixteen. `Questions.json` declares five - `drive`, `recover`, `corner`, `race`,
+`context` - each naming its fields, its templates and how often it is worth
+sending.
+
+Measured with the same question (`freeroam.track_cue`) against `clef-flash`:
+
+| state sent | input tokens | latency |
+| --- | --- | --- |
+| drive lane, 3 fields | 375 | 451 ms |
+| full state, 16 fields | 499 | 268 ms |
+
+Two conclusions, one of which is not the obvious one:
+
+- **Tokens fall by about a quarter** (124 of 499), which is money and context
+  budget: on `clef-flash` that is $0.0000047 saved per call.
+- **Latency does not fall.** The three-field call was the *slower* of the two,
+  because at this size the round trip is network variance rather than payload.
+  A faster lane comes from calling less often (`--every`) and from answering on
+  the page, not from shrinking the body.
+
+So the lanes exist to save tokens and to keep each question honest about what it
+reads; the speed comes from cadence.
+
+---
+
 ## Adding one
 
 Add a key to `Questions.json` with `when` and `questions`. Every question is
