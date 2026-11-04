@@ -3,12 +3,17 @@ driver/target/
 **/*.rlib
 **/*.working
 
-# Scratch: frames, traces, probe artifacts
+# Local run artefacts: frames, traces and probe output from this machine.
+# Named one by one rather than with *.json, because that also swallowed
+# Schema/*.json - which is the repository's data, not this machine's.
 *.jpg
 *.png
 *.jsonl
-*.json
-!driver/module.json
+cuecorr.json
+postest.json
+memread.json
+memscan.json
+state.json
 
 # Node
 node_modules/

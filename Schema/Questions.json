@@ -1,0 +1,124 @@
+{
+	"$comment": "Question templates, one per use case. Each is a Clef `questions` object: typed questions over the fields in Observation.json, with every allowed option written out so the model returns a probability per option rather than free text. Compose a request as {model, state, questions}.",
+	"version": 1,
+	"templates": {
+		"freeroam.cruise": {
+			"when": "free roam, no cue on screen, speed below target",
+			"questions": {
+				"action": {
+					"type": "choice",
+					"instructions": "The route cue is not visible and the car is under its target pace. What next?",
+					"criteria": {
+						"throttle": "Hold the line and keep the throttle down",
+						"brake": "Slow down",
+						"hold": "Coast and change nothing"
+					}
+				},
+				"confidence": { "type": "score", "instructions": "How sure are you of that action?", "criteria": ["guessing", "unsure", "fairly sure", "certain"] }
+			}
+		},
+		"freeroam.track_cue": {
+			"when": "a route cue is on screen",
+			"questions": {
+				"action": {
+					"type": "choice",
+					"instructions": "The route arrow is on screen at route_cue_x, where 0.0 is the far LEFT of the view, 1.0 is the far RIGHT and 0.5 is dead ahead. The road continues where the arrow points, so a value below 0.5 means the road turns LEFT and above 0.5 means it turns RIGHT. What next?",
+					"criteria": {
+						"steer_left": "Turn toward the left of the road",
+						"steer_right": "Turn toward the right of the road",
+						"throttle": "Hold the line and keep the throttle down",
+						"brake": "Slow down"
+					}
+				},
+				"urgency": { "type": "score", "instructions": "How urgently should this be applied?", "criteria": ["whenever", "soon", "now", "immediately"] }
+			}
+		},
+		"corner.entry": {
+			"when": "approaching a turn, speed above the turn pace",
+			"questions": {
+				"action": {
+					"type": "choice",
+					"instructions": "A turn is coming and the car is above its cornering pace. What next?",
+					"criteria": {
+						"brake": "Brake before the turn",
+						"throttle": "Stay on the throttle through it",
+						"steer_left": "Turn left now",
+						"steer_right": "Turn right now"
+					}
+				},
+				"severity": { "type": "score", "instructions": "How much speed should come off?", "criteria": ["none", "a little", "a lot", "as much as possible"] }
+			}
+		},
+		"recovery.stuck": {
+			"when": "stuck: speed under 2 km/h for three ticks",
+			"questions": {
+				"action": {
+					"type": "choice",
+					"instructions": "The car is not moving. What next?",
+					"criteria": {
+						"reverse": "Back out with the steering turned",
+						"throttle": "Keep the throttle down and wait",
+						"brake": "Brake and stop trying"
+					}
+				},
+				"escape": {
+					"type": "choice",
+					"instructions": "Which way is the way out?",
+					"criteria": { "left": "Back out turning left", "right": "Back out turning right", "either": "No reason to prefer one" }
+				}
+			}
+		},
+		"race.start": {
+			"when": "racetype is 1 or 7",
+			"questions": {
+				"action": {
+					"type": "choice",
+					"instructions": "A race is running. What should the car do?",
+					"criteria": {
+						"throttle": "Full throttle, follow the route",
+						"steer_left": "Turn left toward the route",
+						"steer_right": "Turn right toward the route",
+						"brake": "Brake for a corner"
+					}
+				},
+				"risk": { "type": "score", "instructions": "How much risk is acceptable here?", "criteria": ["none", "cautious", "normal", "maximum"] }
+			}
+		},
+		"surface.loss": {
+			"when": "slip above 5 on a road, or a wheel on dirt or grass",
+			"questions": {
+				"action": {
+					"type": "choice",
+					"instructions": "Traction is being lost. What next?",
+					"criteria": {
+						"brake": "Ease off the throttle and brake",
+						"steer_left": "Counter-steer left",
+						"steer_right": "Counter-steer right",
+						"throttle": "Power through it"
+					}
+				},
+				"cause": {
+					"type": "choice",
+					"instructions": "What is the likely cause?",
+					"criteria": { "speed": "Too much speed", "surface": "The surface", "steering": "Too much steering", "unknown": "Cannot tell" }
+				}
+			}
+		},
+		"traffic.ghost": {
+			"when": "other cars are near and ghost mode is on",
+			"questions": {
+				"action": {
+					"type": "choice",
+					"instructions": "Other cars are close but ghost mode means contact cannot happen. What next?",
+					"criteria": {
+						"throttle": "Ignore them and keep the pace",
+						"steer_left": "Move left anyway",
+						"steer_right": "Move right anyway",
+						"brake": "Slow for them"
+					}
+				},
+				"confidence": { "type": "score", "instructions": "How sure are you?", "criteria": ["guessing", "unsure", "fairly sure", "certain"] }
+			}
+		}
+	}
+}
