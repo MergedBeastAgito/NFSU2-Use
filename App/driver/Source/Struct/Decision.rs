@@ -75,8 +75,8 @@ pub struct Decision {
 impl Decision {
 	/// A decision the rules made, with nothing from the model in it.
 	///
-	/// The three advice fields start empty, so a rules-only tick and a tick whose
-	/// call failed are the same value.
+	/// The three advice fields start empty, so a rules-only tick and a tick
+	/// whose call failed are the same value.
 	pub fn Rule(Action:Action, Throttle:bool, Duty:f64, Reason:String) -> Self {
 		Self { Action, Throttle, Duty, Reason, Probability:None, Confidence:None, Obeyed:false }
 	}

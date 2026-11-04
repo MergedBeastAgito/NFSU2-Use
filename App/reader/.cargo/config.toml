@@ -1,0 +1,34 @@
+# The module the page instantiates beside the game's own instance.
+#
+# `--import-memory` is the whole point: memory 0 is the game's memory, so the
+# loads below read the game's heap and nothing is copied across the boundary.
+# `--shared-memory` is not an optimisation - the port builds its memory with
+# `shared: true` (web/src/host/memory.ts, allocMemory), and an import that does
+# not declare `shared` is refused by the engine when the game's memory is
+# offered to it. `--max-memory` has to be at least the game's maximum (65536
+# pages, 4 GB): a smaller declared maximum cannot be matched by the game's.
+#
+# `--no-entry`: there is no start function. Nothing runs at instantiation, so
+# nothing can touch the memory before a caller asks for a reading.
+
+[build]
+target = "wasm32-unknown-unknown"
+
+[target.wasm32-unknown-unknown]
+rustflags = [
+	"-C",
+	"link-arg=--import-memory",
+	"-C",
+	"link-arg=--shared-memory",
+	"-C",
+	"link-arg=--max-memory=4294967296",
+	"-C",
+	"link-arg=--no-entry",
+	# `+simd128` is required by the signature of `read_state`, not by the loads:
+	# a `v128` return is what makes four `f32` cross the boundary in one call
+	# without a store. The module reads with scalar loads only.
+	"-C",
+	"target-feature=+atomics,+bulk-memory,+mutable-globals,+simd128",
+	"-C",
+	"panic=abort",
+]

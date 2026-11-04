@@ -20,9 +20,9 @@ pub const BackTicks:u32 = 5;
 /// Decide one tick.
 ///
 /// The order matters: backing out overrides everything, because a car against a
-/// wall cannot be steered out of it; then the stall test; then the cue; and only
-/// then plain cruising. Reversing steers while it backs, which is the difference
-/// between leaving a wall and reversing into it again.
+/// wall cannot be steered out of it; then the stall test; then the cue; and
+/// only then plain cruising. Reversing steers while it backs, which is the
+/// difference between leaving a wall and reversing into it again.
 pub fn Decide(Car:&Car, Cue:Option<f64>, TargetKmh:f64, Stalled:&mut u32, Back:&mut u32) -> Decision {
 	if *Back > 0 {
 		*Back -= 1;
@@ -44,10 +44,20 @@ pub fn Decide(Car:&Car, Cue:Option<f64>, TargetKmh:f64, Stalled:&mut u32, Back:&
 		let Error = Cue - 0.5;
 		if Error.abs() > Deadzone {
 			let Action = if Error < 0.0 { Action::SteerLeft } else { Action::SteerRight };
-			return Decision::Rule(Action, Car.Kmh < TargetKmh, (Error.abs() * 7.0).min(1.0), format!("cue {Cue:.3}"));
+			return Decision::Rule(
+				Action,
+				Car.Kmh < TargetKmh,
+				(Error.abs() * 7.0).min(1.0),
+				format!("cue {Cue:.3}"),
+			);
 		}
 		return Decision::Rule(Action::Centred, Car.Kmh < TargetKmh, 0.0, format!("cue {Cue:.3}"));
 	}
 
-	Decision::Rule(Action::Cruise, Car.Kmh < TargetKmh, 0.0, format!("no cue · {:.0} km/h", Car.Kmh))
+	Decision::Rule(
+		Action::Cruise,
+		Car.Kmh < TargetKmh,
+		0.0,
+		format!("no cue · {:.0} km/h", Car.Kmh),
+	)
 }

@@ -1,8 +1,9 @@
 //! The expressions this crate sends to the page.
 //!
-//! Each one is a file under `Source/Script/Expressions/`, compiled by `build.rs`
-//! and baked in by Agentic's `script!` macro - the same convention as
-//! `Crate/ChatDriver`, so the file a reader checks is the file the page runs.
+//! Each one is a file under `Source/Script/Expressions/`, compiled by
+//! `build.rs` and baked in by Agentic's `script!` macro - the same convention
+//! as `Crate/ChatDriver`, so the file a reader checks is the file the page
+//! runs.
 //!
 //! A parameter the caller supplies is declared in the script
 //! (`declare const __PARAM_Key__: string;`), which is both the type a reader
@@ -22,7 +23,9 @@ pub fn Bootstrap() -> &'static str { script!("Expressions/Bootstrap") }
 pub fn State() -> &'static str { script!("Expressions/State") }
 
 /// Hold or release one key.
-pub fn Hold(Key:&str, On:bool) -> String { script!("Expressions/Hold"; Key = Key, On = if On { "true" } else { "false" }) }
+pub fn Hold(Key:&str, On:bool) -> String {
+	script!("Expressions/Hold"; Key = Key, On = if On { "true" } else { "false" })
+}
 
 /// Show the decision on the overlay.
 pub fn Publish(Payload:&str) -> String { script!("Expressions/Publish"; Payload = Payload) }

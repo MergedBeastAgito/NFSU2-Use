@@ -7,7 +7,18 @@
 //! added to Agentic for it, because the game injects input itself through
 //! `session.input.key`.
 //!
-//! The three facts this rests on were measured, not assumed:
+//! # The port, and the value that answers for it
+//!
+//! [`Driver`] implements `agentic.adapter`, the port `agentic-sdk` re-exports
+//! for a substrate this workspace did not write. It is the whole reason this
+//! crate is an extension rather than a copy: a composition root constructs the
+//! adapter once, holds it as `Arc<dyn Adapter>`, and passes it on without
+//! naming this crate. [`Policy`] is the request text a call carries, and the
+//! answer is the state the tick read.
+//!
+//! # The three facts this rests on
+//!
+//! They were measured, not assumed:
 //!
 //! - the port's own source names the addresses (`runtime/roam_game.c`), so the
 //!   state feed is a read rather than a search through 1 GB of memory;
@@ -16,10 +27,10 @@
 //! - the cue is visual: the route arrow's screen position, which is why the
 //!   decision takes a cue argument it may be given `None` for.
 //!
-//! The model is an advisor with a probability, and the rules are the driver. The
-//! split lives in one place each: [`Fn::Cloudflare`] asks and parses, [`Fn::Gate`]
-//! decides whether the answer is obeyed, [`Struct::Budget`] says when a run has
-//! asked enough.
+//! The model is an advisor with a probability, and the rules are the driver.
+//! The split lives in one place each: [`Fn::Cloudflare`] asks and parses,
+//! [`Fn::Gate`] decides whether the answer is obeyed, [`Struct::Budget`] says
+//! when a run has asked enough.
 
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
@@ -38,6 +49,8 @@ pub use crate::{
 	Struct::{
 		Budget::Budget,
 		Decision::{Action, Decision},
+		Driver::Driver,
+		Policy::Policy,
 		State::Car,
 	},
 };

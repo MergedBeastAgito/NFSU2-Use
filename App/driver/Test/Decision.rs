@@ -9,19 +9,22 @@
 use AgenticNfsuDriver::{Action, Advice, Budget, Car, Decision, Fail, Gate, ParseAdvice};
 
 /// A car doing 42 km/h: under the 45 target, so the throttle is expected on.
-fn Driving() -> Car {
-	Car { Address:1, Kmh:42.0, Gear:3, Heading:12.5, ..Car::default() }
-}
+fn Driving() -> Car { Car { Address:1, Kmh:42.0, Gear:3, Heading:12.5, ..Car::default() } }
 
 /// One answer from the model.
 fn Said(Word:&str, Probability:f64, Confidence:f64) -> Advice {
-	Advice { Model:"clef-flash".into(), Action:Word.into(), Probability, Confidence, Input:358, Output:0 }
+	Advice {
+		Model:"clef-flash".into(),
+		Action:Word.into(),
+		Probability,
+		Confidence,
+		Input:358,
+		Output:0,
+	}
 }
 
 /// What the rules decided, before the model was asked.
-fn Rules() -> Decision {
-	Decision::Rule(Action::SteerLeft, true, 0.42, "cue 0.440".into())
-}
+fn Rules() -> Decision { Decision::Rule(Action::SteerLeft, true, 0.42, "cue 0.440".into()) }
 
 #[test]
 fn gate_keeps_the_rules_below_the_threshold() {
@@ -96,7 +99,8 @@ fn parse_reads_a_measured_answer() {
 	assert_eq!(Advice.Action, "steer_left");
 	// The chosen option's own share, not a re-normalised guess.
 	assert!((Advice.Probability - 0.2975).abs() < 1e-9, "{}", Advice.Probability);
-	// The score question is a 0..3 scale, normalised to the 0..1 the overlay uses.
+	// The score question is a 0..3 scale, normalised to the 0..1 the overlay
+	// uses.
 	assert!((Advice.Confidence - 1.406 / 3.0).abs() < 1e-9, "{}", Advice.Confidence);
 	assert_eq!(Advice.Input, 358);
 	assert_eq!(Advice.Output, 0);
@@ -104,14 +108,18 @@ fn parse_reads_a_measured_answer() {
 
 #[test]
 fn parse_refuses_a_failed_answer() {
-	let Body = r#"{"result":null,"success":false,"errors":[{"code":10000,"message":"Authentication error"}],"messages":[]}"#;
+	let Body =
+		r#"{"result":null,"success":false,"errors":[{"code":10000,"message":"Authentication error"}],"messages":[]}"#;
 	assert_eq!(ParseAdvice(Body).unwrap_err(), Fail::Unparseable);
 }
 
 #[test]
 fn parse_refuses_garbage_and_an_answer_with_no_choice() {
 	assert_eq!(ParseAdvice("not json").unwrap_err(), Fail::Unparseable);
-	assert_eq!(ParseAdvice(r#"{"success":true,"result":{"answers":{}}}"#).unwrap_err(), Fail::Unparseable);
+	assert_eq!(
+		ParseAdvice(r#"{"success":true,"result":{"answers":{}}}"#).unwrap_err(),
+		Fail::Unparseable
+	);
 }
 
 #[test]

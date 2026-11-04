@@ -39,13 +39,19 @@ const send = (method, params = {}) =>
 		ws.send(JSON.stringify({ id: n, method, params }));
 	});
 const ev = async (x) => {
-	const res = await send("Runtime.evaluate", { expression: x, returnByValue: true, awaitPromise: true });
+	const res = await send("Runtime.evaluate", {
+		expression: x,
+		returnByValue: true,
+		awaitPromise: true,
+	});
 	if (res.exceptionDetails) throw new Error(res.exceptionDetails.text);
 	return res.result.value;
 };
 
 if (FLAG === "--off") {
-	const removed = await ev(`(()=>{let n=0;for(const id of ['hermes-hud','hermes-obs','hermes-dec']){const el=document.getElementById(id);if(el){el.remove();n++}}window.__hermesDebug=null;return n})()`);
+	const removed = await ev(
+		`(()=>{let n=0;for(const id of ['hermes-hud','hermes-obs','hermes-dec']){const el=document.getElementById(id);if(el){el.remove();n++}}window.__hermesDebug=null;return n})()`,
+	);
 	console.log(JSON.stringify({ removed }));
 	ws.close();
 	process.exit(0);
@@ -275,5 +281,7 @@ return { installed: true, obs: !!document.getElementById('hermes-obs'), dec: !!d
 })()`;
 
 const out = await ev(INSTALL);
-console.log(JSON.stringify({ page: page.url, target: TARGET, ...out }, null, 2));
+console.log(
+	JSON.stringify({ page: page.url, target: TARGET, ...out }, null, 2),
+);
 ws.close();

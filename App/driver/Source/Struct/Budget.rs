@@ -1,10 +1,10 @@
 //! What one run has spent, and when to stop spending.
 //!
 //! A per-tick model call is a metered request: without a ceiling a long run
-//! spends real money quietly, and nothing in the trace says so until the invoice
-//! arrives. The budget is the run's own meter - it is checked before every call
-//! and printed once at exit, so a run always ends with a line saying what it
-//! cost, how much of the ceiling it used and why it stopped asking.
+//! spends real money quietly, and nothing in the trace says so until the
+//! invoice arrives. The budget is the run's own meter - it is checked before
+//! every call and printed once at exit, so a run always ends with a line saying
+//! what it cost, how much of the ceiling it used and why it stopped asking.
 //!
 //! A ceiling of zero means no ceiling, so a caller that wants an unbounded run
 //! says so explicitly instead of relying on a large number.
@@ -46,7 +46,8 @@ impl Budget {
 	/// a growing state. Either one being reached ends the asking, and the rules
 	/// carry the rest of the run.
 	pub fn Allows(&self) -> bool {
-		(self.MaxRequests == 0 || self.Requests < self.MaxRequests) && (self.MaxTokens == 0 || self.Tokens() < self.MaxTokens)
+		(self.MaxRequests == 0 || self.Requests < self.MaxRequests)
+			&& (self.MaxTokens == 0 || self.Tokens() < self.MaxTokens)
 	}
 
 	/// Record one answered call.
@@ -64,14 +65,10 @@ impl Budget {
 	}
 
 	/// Input plus output, as the invoice counts it.
-	pub fn Tokens(&self) -> u64 {
-		self.Input + self.Output
-	}
+	pub fn Tokens(&self) -> u64 { self.Input + self.Output }
 
 	/// What this run has cost so far, in dollars.
-	pub fn Cost(&self) -> f64 {
-		self.Input as f64 / 1_000_000.0 * PricePerMillionInput
-	}
+	pub fn Cost(&self) -> f64 { self.Input as f64 / 1_000_000.0 * PricePerMillionInput }
 
 	/// The line a run ends with.
 	///

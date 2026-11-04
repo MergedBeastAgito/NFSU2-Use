@@ -40,13 +40,23 @@ const send = (method, params = {}) =>
 		ws.send(JSON.stringify({ id: n, method, params }));
 	});
 const ev = async (x) => {
-	const res = await send("Runtime.evaluate", { expression: x, returnByValue: true, awaitPromise: true });
+	const res = await send("Runtime.evaluate", {
+		expression: x,
+		returnByValue: true,
+		awaitPromise: true,
+	});
 	if (res.exceptionDetails) throw new Error(res.exceptionDetails.text);
 	return res.result.value;
 };
 
 if (FLAG === "--off") {
-	console.log(JSON.stringify({ removed: await ev(`(()=>{const e=document.getElementById('hermes-lane');if(!e)return 0;e.remove();return 1})()`) }));
+	console.log(
+		JSON.stringify({
+			removed: await ev(
+				`(()=>{const e=document.getElementById('hermes-lane');if(!e)return 0;e.remove();return 1})()`,
+			),
+		}),
+	);
 	ws.close();
 	process.exit(0);
 }
@@ -188,5 +198,7 @@ return { installed: true, lane: !!document.getElementById('hermes-lane'), show: 
 })()`;
 
 const out = await ev(INSTALL);
-console.log(JSON.stringify({ page: page.url, target: TARGET, ...out }, null, 2));
+console.log(
+	JSON.stringify({ page: page.url, target: TARGET, ...out }, null, 2),
+);
 ws.close();

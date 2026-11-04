@@ -26,7 +26,11 @@
 			const Speed = f32(Car + 0x430);
 			return {
 				car: Car,
-				pos: [+f32(Car + 0x60).toFixed(1), +f32(Car + 0x64).toFixed(1), +f32(Car + 0x68).toFixed(1)],
+				pos: [
+					+f32(Car + 0x60).toFixed(1),
+					+f32(Car + 0x64).toFixed(1),
+					+f32(Car + 0x68).toFixed(1),
+				],
 				heading: +((u16(Car + 0x40c) / 65536) * 360).toFixed(1),
 				speed: +Speed.toFixed(2),
 				kmh: Math.round(Math.abs(Speed) * 3.6),
@@ -35,7 +39,11 @@
 			};
 		},
 		hold(Key, On) {
-			if (On && !Held[Key]) Held[Key] = setInterval(() => window.__nfsu2.session.input.key(Key, true), 16);
+			if (On && !Held[Key])
+				Held[Key] = setInterval(
+					() => window.__nfsu2.session.input.key(Key, true),
+					16,
+				);
 			if (!On && Held[Key]) {
 				clearInterval(Held[Key]);
 				delete Held[Key];
@@ -58,4 +66,4 @@
 		},
 	};
 	return "installed";
-})()
+})();

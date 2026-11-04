@@ -16,7 +16,12 @@
 			"why": "wheel state is only worth sending when a wheel is doing something"
 		},
 		"corner": {
-			"fields": ["speed_kmh", "heading_degrees", "route_cue_x", "yaw_rate"],
+			"fields": [
+				"speed_kmh",
+				"heading_degrees",
+				"route_cue_x",
+				"yaw_rate"
+			],
 			"templates": ["corner.entry"],
 			"cadence": "on approach to a turn",
 			"why": "yaw rate says how the car is actually rotating, which the cue alone cannot"
@@ -28,7 +33,16 @@
 			"why": "the race lane adds the two fields that say a race is on at all"
 		},
 		"context": {
-			"fields": ["speed_kmh", "gear", "heading_degrees", "position", "velocity", "route_cue_x", "route_cue_pixels", "road_band_motion"],
+			"fields": [
+				"speed_kmh",
+				"gear",
+				"heading_degrees",
+				"position",
+				"velocity",
+				"route_cue_x",
+				"route_cue_pixels",
+				"road_band_motion"
+			],
 			"templates": ["traffic.ghost"],
 			"cadence": "rarely - a slow lane for judgement, not control",
 			"why": "the full state, for questions where latency does not matter"
@@ -47,7 +61,11 @@
 						"hold": "Coast and change nothing"
 					}
 				},
-				"confidence": { "type": "score", "instructions": "How sure are you of that action?", "criteria": ["guessing", "unsure", "fairly sure", "certain"] }
+				"confidence": {
+					"type": "score",
+					"instructions": "How sure are you of that action?",
+					"criteria": ["guessing", "unsure", "fairly sure", "certain"]
+				}
 			}
 		},
 		"freeroam.track_cue": {
@@ -63,7 +81,11 @@
 						"brake": "Slow down"
 					}
 				},
-				"urgency": { "type": "score", "instructions": "How urgently should this be applied?", "criteria": ["whenever", "soon", "now", "immediately"] }
+				"urgency": {
+					"type": "score",
+					"instructions": "How urgently should this be applied?",
+					"criteria": ["whenever", "soon", "now", "immediately"]
+				}
 			}
 		},
 		"corner.entry": {
@@ -79,7 +101,16 @@
 						"steer_right": "Turn right now"
 					}
 				},
-				"severity": { "type": "score", "instructions": "How much speed should come off?", "criteria": ["none", "a little", "a lot", "as much as possible"] }
+				"severity": {
+					"type": "score",
+					"instructions": "How much speed should come off?",
+					"criteria": [
+						"none",
+						"a little",
+						"a lot",
+						"as much as possible"
+					]
+				}
 			}
 		},
 		"recovery.stuck": {
@@ -97,7 +128,11 @@
 				"escape": {
 					"type": "choice",
 					"instructions": "Which way is the way out?",
-					"criteria": { "left": "Back out turning left", "right": "Back out turning right", "either": "No reason to prefer one" }
+					"criteria": {
+						"left": "Back out turning left",
+						"right": "Back out turning right",
+						"either": "No reason to prefer one"
+					}
 				}
 			}
 		},
@@ -114,7 +149,11 @@
 						"brake": "Brake for a corner"
 					}
 				},
-				"risk": { "type": "score", "instructions": "How much risk is acceptable here?", "criteria": ["none", "cautious", "normal", "maximum"] }
+				"risk": {
+					"type": "score",
+					"instructions": "How much risk is acceptable here?",
+					"criteria": ["none", "cautious", "normal", "maximum"]
+				}
 			}
 		},
 		"surface.loss": {
@@ -133,7 +172,12 @@
 				"cause": {
 					"type": "choice",
 					"instructions": "What is the likely cause?",
-					"criteria": { "speed": "Too much speed", "surface": "The surface", "steering": "Too much steering", "unknown": "Cannot tell" }
+					"criteria": {
+						"speed": "Too much speed",
+						"surface": "The surface",
+						"steering": "Too much steering",
+						"unknown": "Cannot tell"
+					}
 				}
 			}
 		},
@@ -150,7 +194,11 @@
 						"brake": "Slow for them"
 					}
 				},
-				"confidence": { "type": "score", "instructions": "How sure are you?", "criteria": ["guessing", "unsure", "fairly sure", "certain"] }
+				"confidence": {
+					"type": "score",
+					"instructions": "How sure are you?",
+					"criteria": ["guessing", "unsure", "fairly sure", "certain"]
+				}
 			}
 		}
 	}

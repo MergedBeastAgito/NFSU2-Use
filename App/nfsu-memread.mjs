@@ -32,9 +32,23 @@ const send = (method, params = {}) =>
 		q.set(n, r);
 		ws.send(JSON.stringify({ id: n, method, params }));
 	});
-const ev = async (x) => (await send("Runtime.evaluate", { expression: x, returnByValue: true, awaitPromise: true })).result.value;
+const ev = async (x) =>
+	(
+		await send("Runtime.evaluate", {
+			expression: x,
+			returnByValue: true,
+			awaitPromise: true,
+		})
+	).result.value;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const key = (type) => send("Input.dispatchKeyEvent", { type, key: "ArrowUp", code: "ArrowUp", windowsVirtualKeyCode: 38, nativeVirtualKeyCode: 38 });
+const key = (type) =>
+	send("Input.dispatchKeyEvent", {
+		type,
+		key: "ArrowUp",
+		code: "ArrowUp",
+		windowsVirtualKeyCode: 38,
+		nativeVirtualKeyCode: 38,
+	});
 
 await send("Page.enable");
 await key("keyDown");
@@ -57,18 +71,26 @@ const b = JSON.parse(await read());
 await key("keyUp");
 
 const summary = SPOTS.map((off) => {
-	const va = a[off], vb = b[off];
+	const va = a[off],
+		vb = b[off];
 	if (!va || !vb) return { offset: off, note: "out of range" };
-	const changed = va.map((v, i) => (v !== vb[i] ? i : -1)).filter((i) => i >= 0);
+	const changed = va
+		.map((v, i) => (v !== vb[i] ? i : -1))
+		.filter((i) => i >= 0);
 	const first = va.slice(0, 16);
-	const looksMatrix = Math.abs(va[0] - 1) < 0.01 && Math.abs(va[5] - 1) < 0.01 && Math.abs(va[10] - 1) < 0.01;
+	const looksMatrix =
+		Math.abs(va[0] - 1) < 0.01 &&
+		Math.abs(va[5] - 1) < 0.01 &&
+		Math.abs(va[10] - 1) < 0.01;
 	return {
 		offset: off,
 		changedIndices: changed.slice(0, 12),
 		changedCount: changed.length,
 		first16: first,
 		looksLikeIdentityMatrix: looksMatrix,
-		sample: changed.slice(0, 4).map((i) => ({ i, before: va[i], after: vb[i] })),
+		sample: changed
+			.slice(0, 4)
+			.map((i) => ({ i, before: va[i], after: vb[i] })),
 	};
 });
 

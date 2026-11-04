@@ -1,17 +1,17 @@
 //! Compile `Source/Script/**/*.ts` into the JavaScript this crate sends.
 //!
 //! The rule lives in Agentic's `Build/Script.rs` and is reused by path, so this
-//! crate follows the same convention as `Crate/ChatDriver` and `Crate/Workflow`:
-//! one expression per file under `Source/Script/Expressions/`, the file is the
-//! thing an editor and a reader check, and Rust never builds JavaScript with
-//! `format!`.
+//! crate follows the same convention as `Crate/ChatDriver` and
+//! `Crate/Workflow`: one expression per file under
+//! `Source/Script/Expressions/`, the file is the thing an editor and a reader
+//! check, and Rust never builds JavaScript with `format!`.
 //!
-//! What differs is the compiler. Agentic erases type syntax with OXC because its
-//! scripts carry annotations; every script here is written in the JavaScript
-//! subset, so the smallest transformation that makes TypeScript into JavaScript
-//! is the identity, and this build copies the bytes and records the declared
-//! parameters. A script that ever needs a type annotation fails the build
-//! instead of silently shipping one.
+//! What differs is the compiler. Agentic erases type syntax with OXC because
+//! its scripts carry annotations; every script here is written in the
+//! JavaScript subset, so the smallest transformation that makes TypeScript into
+//! JavaScript is the identity, and this build copies the bytes and records the
+//! declared parameters. A script that ever needs a type annotation fails the
+//! build instead of silently shipping one.
 
 // The house style is PascalCase everywhere, including the locals of this build
 // script, so the lint that disagrees with it is off here as it is in the crate's
@@ -28,7 +28,7 @@ fn main() {
 	println!("cargo:rerun-if-changed=Source/Script");
 }
 
-fn Walk(Directory: &Path, Prefix: &str, Out: &Path) {
+fn Walk(Directory:&Path, Prefix:&str, Out:&Path) {
 	let Ok(Entries) = fs::read_dir(Directory) else { return };
 	for Entry in Entries.flatten() {
 		let Path = Entry.path();
@@ -36,8 +36,8 @@ fn Walk(Directory: &Path, Prefix: &str, Out: &Path) {
 		if Path.extension().is_some_and(|e| e == "ts") {
 			let Source = fs::read_to_string(&Path).expect("read script");
 			// A `declare const __PARAM_X__: string;` is both the declaration a
-			// reader sees and the parameter the build records. The line itself is
-			// removed, because it is not JavaScript.
+			// reader sees and the parameter the build records. The line itself
+			// is removed, because it is not JavaScript.
 			let mut Body = String::new();
 			let mut Params = String::new();
 			for Line in Source.lines() {

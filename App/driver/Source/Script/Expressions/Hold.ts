@@ -7,4 +7,4 @@
  */
 declare const __PARAM_Key__: string;
 declare const __PARAM_On__: boolean;
-window.__drv.hold(__PARAM_Key__, __PARAM_On__)
+window.__drv.hold(__PARAM_Key__, __PARAM_On__);

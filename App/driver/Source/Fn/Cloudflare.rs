@@ -20,13 +20,19 @@
 //! a config line, rather than as an argument: on this machine argv is readable
 //! by every process through `ps`.
 
-use std::{env, fs, io::Write, process::{Command, Stdio}};
+use std::{
+	env,
+	fs,
+	io::Write,
+	process::{Command, Stdio},
+};
 
 use serde_json::json;
 
 use crate::Struct::State::Car;
 
-/// The aliases a caller may pass to `--model`, and the bare name the body wants.
+/// The aliases a caller may pass to `--model`, and the bare name the body
+/// wants.
 ///
 /// The body wants the bare name (`clef-flash`), while the URL carries
 /// `@cf/cloudflare/...`.
@@ -90,7 +96,11 @@ impl Fail {
 /// Turn an alias into the bare model name the body expects.
 pub fn Resolve(Name:&str) -> String {
 	let Trimmed = Name.trim().trim_start_matches("@cf/cloudflare/");
-	Models.iter().find(|(Alias, _)| *Alias == Trimmed).map(|(_, Bare)| (*Bare).to_string()).unwrap_or_else(|| Models[0].1.to_string())
+	Models
+		.iter()
+		.find(|(Alias, _)| *Alias == Trimmed)
+		.map(|(_, Bare)| (*Bare).to_string())
+		.unwrap_or_else(|| Models[0].1.to_string())
 }
 
 /// Read one reply.
@@ -108,22 +118,35 @@ pub fn Parse(Body:&str) -> Result<Advice, Fail> {
 	let Answer = &Parsed["result"]["answers"];
 	let Action = Answer["action"]["choice"].as_str().ok_or(Fail::Unparseable)?.to_string();
 	let Probability = Answer["action"]["probabilities"][&Action].as_f64().ok_or(Fail::Unparseable)?;
-	// The score question is a 0..3 scale with a legend; a missing score is not a
-	// failure, it is an answer that declined to rate itself.
-	let Confidence = Answer["confidence"]["score"].as_f64().map(|Score| (Score / 3.0).clamp(0.0, 1.0)).unwrap_or(0.0);
+	// The score question is a 0..3 scale with a legend; a missing score is not
+	// a failure, it is an answer that declined to rate itself.
+	let Confidence = Answer["confidence"]["score"]
+		.as_f64()
+		.map(|Score| (Score / 3.0).clamp(0.0, 1.0))
+		.unwrap_or(0.0);
 	let Model = Parsed["result"]["model"].as_str().unwrap_or("clef").to_string();
 	// The spend sits beside `answers` inside `result`; a top-level `usage` is
 	// read too, because a proxy in front of this endpoint may hoist it.
 	let Usage = &Parsed["result"]["usage"];
-	let Input = Usage["input_tokens"].as_u64().or_else(|| Parsed["usage"]["input_tokens"].as_u64()).unwrap_or(0);
-	let Output = Usage["output_tokens"].as_u64().or_else(|| Parsed["usage"]["output_tokens"].as_u64()).unwrap_or(0);
+	let Input = Usage["input_tokens"]
+		.as_u64()
+		.or_else(|| Parsed["usage"]["input_tokens"].as_u64())
+		.unwrap_or(0);
+	let Output = Usage["output_tokens"]
+		.as_u64()
+		.or_else(|| Parsed["usage"]["output_tokens"].as_u64())
+		.unwrap_or(0);
 	Ok(Advice { Model, Action, Probability, Confidence, Input, Output })
 }
 
 /// Ask a model what it would do. `Err` on any failure.
 pub fn Advise(Car:&Car, Cue:Option<f64>, Name:&str) -> Result<Advice, Fail> {
 	let Bare = Resolve(Name);
-	let Token = env::var("CLOUDFLARE_API_TOKEN").ok().or_else(FromDotEnv).filter(|Token| !Token.is_empty()).ok_or(Fail::NoToken)?;
+	let Token = env::var("CLOUDFLARE_API_TOKEN")
+		.ok()
+		.or_else(FromDotEnv)
+		.filter(|Token| !Token.is_empty())
+		.ok_or(Fail::NoToken)?;
 	let Account = env::var("CLOUDFLARE_ACCOUNT_ID").unwrap_or_else(|_| "REDACTED-ACCOUNT-ID".into());
 	let Url = format!("https://api.cloudflare.com/client/v4/accounts/{Account}/ai/run/@cf/cloudflare/{Bare}");
 	let State = json!({
@@ -222,6 +245,9 @@ fn FromDotEnv() -> Option<String> {
 	let Home = env::var("HOME").ok()?;
 	let Text = fs::read_to_string(format!("{Home}/.env")).ok()?;
 	Text.lines()
-		.find_map(|Line| Line.strip_prefix("CLOUDFLARE_API_TOKEN=").map(|Value| Value.trim().trim_matches('"').to_string()))
+		.find_map(|Line| {
+			Line.strip_prefix("CLOUDFLARE_API_TOKEN=")
+				.map(|Value| Value.trim().trim_matches('"').to_string())
+		})
 		.filter(|Token| !Token.is_empty())
 }

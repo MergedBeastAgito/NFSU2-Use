@@ -31,9 +31,23 @@ const send = (method, params = {}) =>
 		q.set(n, r);
 		ws.send(JSON.stringify({ id: n, method, params }));
 	});
-const ev = async (x) => (await send("Runtime.evaluate", { expression: x, returnByValue: true, awaitPromise: true })).result.value;
+const ev = async (x) =>
+	(
+		await send("Runtime.evaluate", {
+			expression: x,
+			returnByValue: true,
+			awaitPromise: true,
+		})
+	).result.value;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const key = (type) => send("Input.dispatchKeyEvent", { type, key: "ArrowUp", code: "ArrowUp", windowsVirtualKeyCode: 38, nativeVirtualKeyCode: 38 });
+const key = (type) =>
+	send("Input.dispatchKeyEvent", {
+		type,
+		key: "ArrowUp",
+		code: "ArrowUp",
+		windowsVirtualKeyCode: 38,
+		nativeVirtualKeyCode: 38,
+	});
 
 await send("Page.enable");
 
@@ -41,7 +55,8 @@ const size = await ev("window.__nfsu2.session.proc.memory.buffer.byteLength");
 const offsets = [];
 // Float32Array views must start on a 4-byte boundary, so the stride is aligned.
 const step = Math.max(WIN, Math.floor(size / 10 / 4) * 4);
-for (let o = 0; o + WIN <= size && offsets.length < 10; o += step) offsets.push(o);
+for (let o = 0; o + WIN <= size && offsets.length < 10; o += step)
+	offsets.push(o);
 
 await key("keyDown");
 await sleep(500);
@@ -72,7 +87,10 @@ for (const off of offsets) {
       res(JSON.stringify({ changed: hits.length, longestRun: best, runAt: runEnd >= 0 ? ${off} + (runEnd - best + 1) * 4 : null }));
     }, 900));
   })()`);
-	results.push({ offsetMb: Math.round(off / 1048576), ...JSON.parse(summary) });
+	results.push({
+		offsetMb: Math.round(off / 1048576),
+		...JSON.parse(summary),
+	});
 }
 await key("keyUp");
 

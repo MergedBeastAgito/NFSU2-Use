@@ -4,7 +4,12 @@
 	"version": "0.1.0",
 	"provides": {
 		"port": "agentic.nfsu.drive",
-		"errors": ["browser-unavailable", "navigation-failed", "timeout"]
+		"errors": [
+			"browser-unavailable",
+			"navigation-failed",
+			"timeout",
+			"request-invalid"
+		]
 	},
 	"requires": {
 		"ports": ["agentic.browse"]

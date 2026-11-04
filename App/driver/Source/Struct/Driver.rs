@@ -1,0 +1,296 @@
+//! The driver as the port's value: one adapter, held by whoever composed it.
+//!
+//! This is the half `module.json` has been claiming since it said
+//! `"kind": "adapter"`. The call path was already here - read the car, decide,
+//! ask the model, hold the keys, publish - but it lived in `Source/Main.rs`,
+//! which is a program and not a value: nothing could hold it, pass it on, or
+//! substitute it. `Driver` is that value, and `impl Adapter for Driver` is what
+//! makes it reachable from outside this crate without naming this crate.
+//!
+//! # What a request is
+//!
+//! The port carries text, so the request is this driver's own encoding:
+//! [`Policy`] as JSON. One call performs one tick and answers the state it
+//! read: the car, the decision, and the tick number. That is the same payload
+//! the overlay is given, so a caller reading the answer and a person watching
+//! the screen are looking at one fact.
+//!
+//! The run's length is not the adapter's business: `Call` performs one tick,
+//! and how many ticks a run takes is the composition root's decision, taken
+//! from a policy it already holds.
+//!
+//! # What it holds, and what `Dispose` releases
+//!
+//! A page handle, the browser session that owns it, the meter, and the two
+//! counters the rules carry between ticks. `Dispose` releases the keys first -
+//! a held throttle survives the process that set it, so that is the one step
+//! that must not be skipped - and then lets the session go. It is idempotent
+//! and it never fails, which is what the port requires of a release.
+
+use std::{
+	sync::{
+		Arc,
+		Mutex,
+		MutexGuard,
+		atomic::{AtomicBool, Ordering},
+	},
+	time::Duration,
+};
+
+use AgenticSdk::{
+	Adapter,
+	Browse,
+	Call,
+	Clock,
+	Error as BrowseError,
+	FutureBox,
+	Never,
+	Port::Adapter::Error as AdapterError,
+	Target,
+};
+use serde_json::{Value, json};
+
+use crate::{
+	Fn::{Cloudflare::Advise as AdviseCloudflare, Decide::Decide as DecideAction, Expressions, Gate::Gate},
+	Struct::{Budget::Budget, Policy::Policy, State::Car},
+};
+
+/// The port this adapter provides, as `module.json` declares it.
+///
+/// One constant rather than a literal in three places: the value reports it,
+/// the manifest names it, and `Serves` compares the two - so a copy that
+/// drifted would be a driver whose manifest is about a different crate.
+pub const Port:&str = "agentic.nfsu.drive";
+
+/// The code a request this driver cannot read is reported with.
+///
+/// The other three codes are the browser's, because the substrate is the
+/// browser: a page that went away is `browser-unavailable`, one that threw is
+/// `navigation-failed`, and a deadline is `timeout`. A request that is not a
+/// policy is this crate's own failure and says so, rather than borrowing a word
+/// about a page that never misbehaved.
+pub const RequestInvalid:&str = "request-invalid";
+
+/// What the rules carry from one tick to the next.
+#[derive(Clone, Copy, Debug, Default)]
+struct Run {
+	/// Ticks this adapter has performed.
+	Tick:u32,
+	/// How many ticks in a row the car has not moved.
+	Stalled:u32,
+	/// How many ticks are left backing out of something.
+	Back:u32,
+}
+
+/// One substrate behind `agentic.adapter`: the NFSU2 browser port, driven from
+/// its own memory.
+pub struct Driver {
+	/// The browser session this adapter drives, as the port that owns it.
+	Browser:Arc<dyn Browse>,
+	/// The page it is bound to.
+	Page:Target,
+	/// The policy a request that says nothing inherits.
+	Policy:Policy,
+	/// How long a release may take.
+	///
+	/// A span rather than a `Call`: a call built when the adapter was
+	/// constructed would have expired by the time a long run ended, and the
+	/// release it carried would fail against a page that is still answering.
+	/// `Dispose` takes no call of its own, so the span is the only thing that
+	/// can be held - and the clock is supplied rather than reached for.
+	ReleaseSpan:Duration,
+	/// The clock a release's deadline is measured against.
+	Clock:Arc<dyn Clock>,
+	/// What this run has spent, and when to stop spending.
+	Budget:Mutex<Budget>,
+	/// The counters the rules carry between ticks.
+	Run:Mutex<Run>,
+	/// Whether the ceiling has already been reported, so a trace says it once.
+	Spent:AtomicBool,
+	/// Whether the page-side driver has been installed on this page.
+	Bootstrapped:AtomicBool,
+	/// Whether this adapter was released.
+	Disposed:AtomicBool,
+}
+
+impl Driver {
+	/// An adapter over an open page, with the policy it starts from.
+	pub fn New(
+		Browser:Arc<dyn Browse>,
+		Page:Target,
+		Policy:Policy,
+		Budget:Budget,
+		ReleaseSpan:Duration,
+		Clock:Arc<dyn Clock>,
+	) -> Self {
+		Self {
+			Browser,
+			Page,
+			Policy,
+			ReleaseSpan,
+			Clock,
+			Budget:Mutex::new(Budget),
+			Run:Mutex::new(Run::default()),
+			Spent:AtomicBool::new(false),
+			Bootstrapped:AtomicBool::new(false),
+			Disposed:AtomicBool::new(false),
+		}
+	}
+
+	/// What the run has spent so far.
+	///
+	/// A copy rather than a borrow: the composition root prints this after the
+	/// adapter has been released, and a value that outlived its adapter is the
+	/// one thing an exit line can safely hold.
+	pub fn Meter(&self) -> Budget { Lock(&self.Budget).clone() }
+
+	/// Whether this adapter was released.
+	pub fn Disposed(&self) -> bool { self.Disposed.load(Ordering::SeqCst) }
+
+	/// One expression, with the browser's own failure vocabulary mapped onto
+	/// the adapter's.
+	async fn Evaluate(&self, Expression:&str, Bounded:Call) -> Result<Value, AdapterError> {
+		self.Browser.Evaluate(&self.Page, Expression, Bounded).await.map_err(Refused)
+	}
+
+	/// One tick: read the car, decide, ask the model if the policy says to,
+	/// hold the keys, publish, answer what was read.
+	async fn Tick(&self, Policy:&Policy, Bounded:Call) -> Result<Value, AdapterError> {
+		// The page-side driver is installed once, by the first call, and the
+		// flag is set only after the install succeeded: a bootstrap
+		// that failed has to be attempted again, because the page it
+		// failed on is the page a state read would fail on next. Two
+		// concurrent first calls would both install it, which the
+		// script is idempotent about; the port promises no concurrency
+		// and this does not add one.
+		if !self.Bootstrapped.load(Ordering::SeqCst) {
+			self.Evaluate(Expressions::Bootstrap(), Bounded.clone()).await?;
+			self.Bootstrapped.store(true, Ordering::SeqCst);
+		}
+
+		let Raw = self.Evaluate(Expressions::State(), Bounded.clone()).await?;
+		// A page that answers without a car is the wrong page: a memory read
+		// that found nothing is not a car parked at the origin.
+		let Car = Car::From(&Raw).ok_or_else(|| {
+			AdapterError::New("navigation-failed", "the page answered without a car").WithDetail(Raw.to_string())
+		})?;
+
+		// The counters are read and written in one scope, before any await: a
+		// guard held across one would make the future `!Send` and the port
+		// unusable from a spawned task.
+		let (Tick, mut Decision) = {
+			let mut Guard = Lock(&self.Run);
+			// One reborrow of the whole struct: two field borrows through the
+			// guard itself would be two mutable borrows of the guard.
+			let Run = &mut *Guard;
+			Run.Tick += 1;
+			let Decision = DecideAction(&Car, Policy.Cue, Policy.TargetKmh, &mut Run.Stalled, &mut Run.Back);
+			(Run.Tick, Decision)
+		};
+
+		if let Some(Name) = &Policy.Model
+			&& Tick % Policy.Every == 0
+		{
+			let mut Meter = Lock(&self.Budget);
+			if Meter.Allows() {
+				// A failed call is not a decision: the rules already made one,
+				// and the meter records why the model is not in it.
+				match AdviseCloudflare(&Car, Policy.Cue, Name) {
+					Ok(Advice) => {
+						Meter.Charge(Advice.Input, Advice.Output);
+						Decision = Gate::New(Policy.Threshold).Apply(Decision, &Advice, &Car, Policy.TargetKmh);
+					},
+					Err(Why) => Meter.Miss(Why.Why()),
+				}
+			} else if !self.Spent.swap(true, Ordering::SeqCst) {
+				// Said once, when the ceiling is first reached, rather than on
+				// every tick after it: the fact does not change, and a trace
+				// that repeats it buries the decisions it is
+				// supposed to explain.
+				println!(
+					"budget · ceiling reached after {} requests · the rules drive the rest",
+					Meter.Requests
+				);
+			}
+		}
+
+		for (Key, On) in [
+			("ArrowUp", Decision.Throttle),
+			("ArrowLeft", Decision.Action.Key() == Some("ArrowLeft")),
+			("ArrowRight", Decision.Action.Key() == Some("ArrowRight")),
+			("ArrowDown", Decision.Action.Key() == Some("ArrowDown")),
+		] {
+			self.Evaluate(&Expressions::Hold(Key, On), Bounded.clone()).await?;
+		}
+
+		let Payload = json!({
+			"tick": Tick,
+			"car": { "kmh": Car.Kmh, "gear": Car.Gear, "heading": Car.Heading, "pos": Car.Position, "rpm": Car.Rpm },
+			"decision": {
+				"action": Decision.Action.Name(),
+				"ms": (Decision.Duty * 100.0).round(),
+				"reason": Decision.Reason,
+				"probability": Decision.Probability,
+				"confidence": Decision.Confidence,
+				"advised": Decision.Obeyed
+			}
+		});
+		self.Evaluate(&Expressions::Publish(&Payload.to_string()), Bounded).await?;
+		Ok(Payload)
+	}
+}
+
+impl Adapter for Driver {
+	fn Port(&self) -> &'static str { Port }
+
+	fn Call<'a>(&'a self, Request:&'a str, Bounded:Call) -> FutureBox<'a, Result<Value, AdapterError>> {
+		Box::pin(async move {
+			if self.Disposed.load(Ordering::SeqCst) {
+				return Err(AdapterError::New(RequestInvalid, "the adapter was released before this call"));
+			}
+			// Empty text is a caller with nothing to say, which is the policy
+			// this adapter was constructed with. Anything else has
+			// to parse: a request that half-parsed would be a run
+			// nobody wrote.
+			if Request.trim().is_empty() {
+				return self.Tick(&self.Policy, Bounded).await;
+			}
+			let Wanted = Policy::From(Request).map_err(|Why| AdapterError::New(RequestInvalid, Why))?;
+			self.Tick(&Wanted, Bounded).await
+		})
+	}
+
+	fn Dispose<'a>(&'a self) -> FutureBox<'a, ()> {
+		Box::pin(async move {
+			// A second release is a no-op rather than a second teardown: the
+			// caller may be a guard that runs on both paths out of a run.
+			if self.Disposed.swap(true, Ordering::SeqCst) {
+				return;
+			}
+			// Built now, not at construction: a deadline fixed when the adapter
+			// was composed has already passed by the end of a long run, and the
+			// release is the one call that must still be answered.
+			let Bounded = Call::Within(self.ReleaseSpan, &*self.Clock, Arc::new(Never));
+			self.Browser.Evaluate(&self.Page, Expressions::Release(), Bounded).await.ok();
+			self.Browser.Dispose(self.Page.clone()).await;
+		})
+	}
+}
+
+/// A browser failure, in the adapter's vocabulary.
+///
+/// The three codes are the same three words - the substrate *is* the browser -
+/// so the mapping is by name rather than by a table that would drift from the
+/// manifest. What the browser said stays in the message, and what it observed
+/// stays in the detail, because a caller narrowing on the code should not have
+/// to parse a sentence to find out which page broke.
+fn Refused(Why:BrowseError) -> AdapterError {
+	AdapterError::New(Why.Code().Name(), Why.Message()).WithDetail(Why.Detail())
+}
+
+/// A lock whose poisoning is not a failure.
+///
+/// A panicked call must not make the adapter permanently unusable: the data
+/// behind the lock is still there, and a release that could not run because an
+/// earlier tick panicked would leave the keys held.
+fn Lock<T>(Guard:&Mutex<T>) -> MutexGuard<'_, T> { Guard.lock().unwrap_or_else(|Poison| Poison.into_inner()) }

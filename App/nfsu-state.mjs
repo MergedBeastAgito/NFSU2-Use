@@ -38,15 +38,24 @@ const send = (method, params = {}) =>
 		q.set(n, r);
 		ws.send(JSON.stringify({ id: n, method, params }));
 	});
-const ev = async (x) => (await send("Runtime.evaluate", { expression: x, returnByValue: true, awaitPromise: true })).result.value;
+const ev = async (x) =>
+	(
+		await send("Runtime.evaluate", {
+			expression: x,
+			returnByValue: true,
+			awaitPromise: true,
+		})
+	).result.value;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const key = (type, name) =>
 	send("Input.dispatchKeyEvent", {
 		type,
 		key: name,
 		code: name,
-		windowsVirtualKeyCode: name === "ArrowLeft" ? 37 : name === "ArrowUp" ? 38 : 39,
-		nativeVirtualKeyCode: name === "ArrowLeft" ? 37 : name === "ArrowUp" ? 38 : 39,
+		windowsVirtualKeyCode:
+			name === "ArrowLeft" ? 37 : name === "ArrowUp" ? 38 : 39,
+		nativeVirtualKeyCode:
+			name === "ArrowLeft" ? 37 : name === "ArrowUp" ? 38 : 39,
 	});
 
 await send("Page.enable");
@@ -83,7 +92,8 @@ await ev(`(()=>{
   return "installed";
 })()`);
 
-const sample = async () => JSON.parse(await ev("JSON.stringify(window.__car())"));
+const sample = async () =>
+	JSON.parse(await ev("JSON.stringify(window.__car())"));
 
 const idle = await sample();
 await key("keyDown", "ArrowUp");

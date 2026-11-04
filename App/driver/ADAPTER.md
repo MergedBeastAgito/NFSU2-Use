@@ -2,18 +2,21 @@
 
 A proposal for the package this crate needed and Agentic does not have.
 
-**Landed.** `Crate/Adapter` (`agentic-adapter`) exists in the Agentic workspace,
-this crate's `module.json` declares `"kind": "adapter"`, and
-`agentic verify --module @agentic/nfsu-driver` reports it ready. What follows is
-the proposal, with the two places it was wrong corrected against the
-implementation: a specification that disagrees with the code it produced is worse
-than no specification.
+**Landed, in two halves.** `Crate/Adapter` (`agentic-adapter`) exists in the
+Agentic workspace, `agentic-sdk` re-exports its port so a crate outside the tree
+can implement it, and this crate's `Driver` does implement it: `module.json`
+declares `"kind": "adapter"`, `agentic verify --module @agentic/nfsu-driver`
+reports it ready, and `Test/Adapter.rs` holds the value as `Arc<dyn Adapter>`
+and asks `Serves` whether it agrees with that file. What follows is the
+proposal, with the two places it was wrong corrected against the implementation:
+a specification that disagrees with the code it produced is worse than no
+specification.
 
 ## The gap
 
 Agentic ships capabilities (`browse`, `chat`, `design`, `skills`) and a
 composition root that names the one concrete browser adapter. A third party with
-a *new substrate* - another game, another protocol, another device - can copy
+a _new substrate_ - another game, another protocol, another device - can copy
 this crate, but there is nowhere to register it: `agentic manifests` lists what
 the workspace compiles in, and nothing outside that workspace could say "I
 provide this port" and be believed.
@@ -52,11 +55,14 @@ manifest names no errors and this one names three.
 ## An adapter crate declares itself in its own `module.json`
 
 ```json
-{ "name": "@someone/thing", "kind": "adapter",
-  "provides": { "port": "agentic.thing.drive", "errors": ["timeout"] },
-  "requires": { "ports": ["agentic.browse"] },
-  "artefact": { "entry": "Target/release/thing", "runtime": "rust>=1.88" },
-  "state": "holds-transport" }
+{
+	"name": "@someone/thing",
+	"kind": "adapter",
+	"provides": { "port": "agentic.thing.drive", "errors": ["timeout"] },
+	"requires": { "ports": ["agentic.browse"] },
+	"artefact": { "entry": "Target/release/thing", "runtime": "rust>=1.88" },
+	"state": "holds-transport"
+}
 ```
 
 `kind: "adapter"` is the only new vocabulary. Everything else - `provides`,
@@ -82,9 +88,38 @@ carries and a row it read are never confused.
 `Documentation/Adapter.md` in the Agentic repository is the full statement: what
 the reader accepts, what a foreign readiness report checks, and what it cannot.
 
+## What this crate does with it
+
+`Source/Struct/Driver.rs` is the value a composition root holds:
+
+- `Port()` answers `agentic.nfsu.drive` - the string `module.json` declares,
+  from one constant rather than three literals;
+- `Call(Request, Call)` performs one tick: bootstrap the page on the first call,
+  read the car, decide, ask the model when the policy says to, hold the four
+  keys, publish, and answer the state it read as
+  `{ "tick", "car", "decision" }`;
+- `Dispose()` releases the keys and then the page, once, and never fails - a
+  held throttle survives the process that set it, so the release is the one step
+  that must not be skipped. Its deadline is built when it runs, not when the
+  adapter was composed: a call fixed at construction has already expired by the
+  end of a long run, and the release it carried would be refused by a page that
+  is still answering.
+
+`Request` is this crate's own encoding, in `Source/Struct/Policy.rs`:
+`{"cue":0.42,"target":45,"model":null,"every":10,"threshold":0.6}`. A key the
+policy does not know is refused with `request-invalid` - the one code in
+`provides.errors` that is not the browser's - rather than silently ignored; an
+absent key takes its default; empty text means "the policy this adapter was
+constructed with".
+
+`Source/Main.rs` is the composition root: it constructs `Driver` once, holds it
+as `Arc<dyn Adapter>`, and drives one call per tick. It names no expression any
+more, so the five the crate sends live in one place and the loop cannot send a
+sixth.
+
 ## What this crate demonstrates
 
-`@agentic/nfsu-driver` is an adapter in everything including the `kind` field: it
-requires `agentic.browse`, provides `agentic.nfsu.drive`, keeps its JavaScript in
-`Source/Script/Expressions/*.ts` compiled by `build.rs`, and is consumed by path
-so Agentic is never modified. The migration was the one field.
+`@agentic/nfsu-driver` is an adapter in everything including the `kind` field:
+it requires `agentic.browse`, provides `agentic.nfsu.drive`, keeps its
+JavaScript in `Source/Script/Expressions/*.ts` compiled by `build.rs`, and is
+consumed by path so Agentic is never modified. The migration was the one field.

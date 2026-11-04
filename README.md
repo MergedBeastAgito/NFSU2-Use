@@ -1,8 +1,9 @@
 # NFSU2 Agentic
 
 Drives the browser port of Need for Speed: Underground 2 from the game's own
-memory, through Agentic's browser port. A Rust crate does the driving; a small
-JavaScript harness does the seeing and the showing.
+memory, through Agentic's browser port. Two Rust crates do the work - a driver
+that holds the port, and a wasm reader that reads the game's memory from inside
+it - and a small JavaScript harness does the seeing and the showing.
 
 ---
 
@@ -20,8 +21,8 @@ assumed:
   single frame; re-asserted every 16 ms it holds a key. Measured: one call moved
   the car 0.2 m, the interval moved it 11 m in 4 s.
 - **The route cue is visual.** The arrow is drawn, not published, so its screen
-  position is read from a captured frame - one cyan cluster, filtered against the
-  minimap corner and edge-hugging signage.
+  position is read from a captured frame - one cyan cluster, filtered against
+  the minimap corner and edge-hugging signage.
 
 Because the page injects its own input, Agentic needs no input verb: every step
 here is one `Evaluate`.
@@ -34,13 +35,19 @@ here is one `Evaluate`.
 App/                        the application: what runs
   driver/                   the Rust crate (an extension beside Agentic)
     Source/Library.rs       crate doc, modules, re-exports
-    Source/Main.rs          the composition root and the loop
+    Source/Main.rs          the composition root: one adapter, one loop
     Source/Fn/              Decide, Cloudflare, Expressions, Gate
-    Source/Struct/          State, Decision, Budget
+    Source/Struct/          State, Decision, Budget, Policy, Driver
     Source/Script/Expressions  one .ts file per expression the page runs
     build.rs                compiles those scripts into OUT_DIR/Script
     module.json             the manifest Agentic's vocabulary already reads
-    ADAPTER.md              the adapter surface Agentic does not have yet
+    ADAPTER.md              the adapter surface, and what this crate does with it
+  reader/                   the wasm reader: the car state, from inside the game
+    Source/Library.rs       the module - no_std, no allocator, no stores
+    .cargo/config.toml      the link flags, and why each is required
+    Documentation/          the import contract, the offsets, the input mailbox
+    Test/attach.mjs         attach, twenty ticks, panic probe, soak
+    Test/ring.mjs           measure the input mailbox against the running game
   nfsu-drive4.mjs           the JS driver: duty-cycle steering, hysteretic throttle
   nfsu-gui4.mjs             HUD, observations, decisions, power and pipe switches
   nfsu-lane.mjs             the pipeline lane: SEND → RECEIVE → APPLIED → TRACE
@@ -69,13 +76,25 @@ cd driver && cargo build --release
 ./target/release/nfsu-driver --attach "$WS" --bind <target-id> --ticks 40 --target 45
 ```
 
+The reader is a `cdylib` and nothing else: it builds to a `.wasm` module the page
+instantiates beside the game's own, importing the game's shared memory.
+
+```sh
+cd reader && cargo build --release          # .cargo/config.toml carries the link flags
+node Test/attach.mjs --soak 60              # attach, 20 ticks, panic probe, soak
+node Test/ring.mjs                          # measure the input mailbox
+```
+
+The harnesses need `wasm-objdump` (`brew install wabt`) and the game running in a
+tab reachable over CDP.
+
 The JavaScript harness is installed into the page, not run by it:
 
 ```sh
-node nfsu-bus.mjs  <target-id> 9222
-node nfsu-gui4.mjs <target-id> 9222
-node nfsu-lane.mjs <target-id> 9222
-node nfsu-drive4.mjs <target-id> 9222 600 150
+node nfsu-bus.mjs < target-id > 9222
+node nfsu-gui4.mjs < target-id > 9222
+node nfsu-lane.mjs < target-id > 9222
+node nfsu-drive4.mjs 600 150 < target-id > 9222
 ```
 
 ---
@@ -85,12 +104,13 @@ node nfsu-drive4.mjs <target-id> 9222 600 150
 Cloudflare's Clef models are decision models, not chat models: they take a
 `state` and a schema of typed `questions` and return a probability for every
 allowed option. The chat-completions route rejects that shape with a 400, so the
-request goes to `/ai/run/@cf/cloudflare/<name>` with `{model, state, questions}`.
+request goes to `/ai/run/@cf/cloudflare/<name>` with
+`{model, state, questions}`.
 
-| alias | model | price |
-| --- | --- | --- |
+| alias        | model                       | price            |
+| ------------ | --------------------------- | ---------------- |
 | `clef-flash` | `@cf/cloudflare/clef-flash` | $0.038 / M input |
-| `clef` | `@cf/cloudflare/clef` | $0.24 / M input |
+| `clef`       | `@cf/cloudflare/clef`       | $0.24 / M input  |
 
 One measured call: `action: throttle` at 0.5348, confidence 2.12 of 3, 343 input
 tokens and no output tokens - about $0.000013, which is why advice is throttled

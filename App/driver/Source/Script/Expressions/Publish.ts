@@ -6,4 +6,4 @@
  * must not stop the car - it returns 0 and the loop carries on.
  */
 declare const __PARAM_Payload__: object;
-window.__drv.publish(__PARAM_Payload__)
+window.__drv.publish(__PARAM_Payload__);

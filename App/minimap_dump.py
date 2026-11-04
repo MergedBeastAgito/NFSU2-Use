@@ -18,7 +18,7 @@ crop = im.crop((0, int(H * 0.55), int(W * 0.34), H))
 cw, ch = crop.size
 cols, rows = 56, 30
 small = crop.resize((cols, rows))
-raw = small.tobytes()          # RGB triples, row-major
+raw = small.tobytes()  # RGB triples, row-major
 
 print(f"frame {W}x{H} | minimap crop {cw}x{ch} -> {cols}x{rows}")
 for y in range(rows):
@@ -27,9 +27,9 @@ for y in range(rows):
         i = (y * cols + x) * 3
         r, g, b = raw[i], raw[i + 1], raw[i + 2]
         if b >= 140 and b - r >= 40 and g >= 80:
-            line += "C"                      # cyan
+            line += "C"  # cyan
         elif r >= 110 and g >= 60 and b <= 95 and r - b >= 35:
-            line += "o"                      # warm road
+            line += "o"  # warm road
         elif max(r, g, b) < 45:
             line += "."
         else:

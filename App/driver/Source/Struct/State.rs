@@ -34,7 +34,11 @@ impl Car {
 		let Position = Value.get("pos")?.as_array()?;
 		Some(Self {
 			Address,
-			Position:[Position.first()?.as_f64()?, Position.get(1)?.as_f64()?, Position.get(2)?.as_f64()?],
+			Position:[
+				Position.first()?.as_f64()?,
+				Position.get(1)?.as_f64()?,
+				Position.get(2)?.as_f64()?,
+			],
 			Heading:Value.get("heading")?.as_f64()?,
 			Speed:Value.get("speed")?.as_f64()?,
 			Kmh:Value.get("kmh")?.as_f64()?,

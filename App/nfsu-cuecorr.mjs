@@ -8,7 +8,8 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 
-const [TARGET, PORT = "9222", SAMPLES = "8", OFF_MB = "819"] = process.argv.slice(2);
+const [TARGET, PORT = "9222", SAMPLES = "8", OFF_MB = "819"] =
+	process.argv.slice(2);
 const DIR = ".";
 const PY = "python3";
 const WIN = 8 * 1024 * 1024;
@@ -38,9 +39,23 @@ const send = (method, params = {}) =>
 		q.set(n, r);
 		ws.send(JSON.stringify({ id: n, method, params }));
 	});
-const ev = async (x) => (await send("Runtime.evaluate", { expression: x, returnByValue: true, awaitPromise: true })).result.value;
+const ev = async (x) =>
+	(
+		await send("Runtime.evaluate", {
+			expression: x,
+			returnByValue: true,
+			awaitPromise: true,
+		})
+	).result.value;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const key = (type) => send("Input.dispatchKeyEvent", { type, key: "ArrowUp", code: "ArrowUp", windowsVirtualKeyCode: 38, nativeVirtualKeyCode: 38 });
+const key = (type) =>
+	send("Input.dispatchKeyEvent", {
+		type,
+		key: "ArrowUp",
+		code: "ArrowUp",
+		windowsVirtualKeyCode: 38,
+		nativeVirtualKeyCode: 38,
+	});
 const key2 = (type, name) =>
 	send("Input.dispatchKeyEvent", {
 		type,
@@ -53,7 +68,13 @@ const key2 = (type, name) =>
 await send("Page.enable");
 const m = await send("Page.getLayoutMetrics");
 const vp = m.cssVisualViewport || m.visualViewport;
-const clip = { x: 0, y: 0, width: vp.clientWidth, height: Math.round(vp.clientHeight * 0.63), scale: 0.5 };
+const clip = {
+	x: 0,
+	y: 0,
+	width: vp.clientWidth,
+	height: Math.round(vp.clientHeight * 0.63),
+	scale: 0.5,
+};
 
 await key("keyDown");
 const rows = [];
@@ -61,13 +82,27 @@ const rows = [];
 // up, then down. A real position tracks that; a monotone counter does not.
 let pulseLeft = true;
 for (let i = 0; i < Number(SAMPLES); i++) {
-	const { data } = await send("Page.captureScreenshot", { format: "jpeg", quality: 55, clip });
+	const { data } = await send("Page.captureScreenshot", {
+		format: "jpeg",
+		quality: 55,
+		clip,
+	});
 	const frame = `${DIR}/corr-${i}.jpg`;
 	fs.writeFileSync(frame, Buffer.from(data, "base64"));
-	const seen = JSON.parse(spawnSync(PY, [`${DIR}/analyze_frame.py`, frame, "--json"], { encoding: "utf8" }).stdout);
-	const snap = await ev(`(()=>{const m=window.__nfsu2.session.proc.memory;if(${OFF}+${WIN}>m.buffer.byteLength)return null;return JSON.stringify(Array.from(new Float32Array(m.buffer,${OFF},${WIN / 4})));})()`);
+	const seen = JSON.parse(
+		spawnSync(PY, [`${DIR}/analyze_frame.py`, frame, "--json"], {
+			encoding: "utf8",
+		}).stdout,
+	);
+	const snap = await ev(
+		`(()=>{const m=window.__nfsu2.session.proc.memory;if(${OFF}+${WIN}>m.buffer.byteLength)return null;return JSON.stringify(Array.from(new Float32Array(m.buffer,${OFF},${WIN / 4})));})()`,
+	);
 	if (!snap) break;
-	rows.push({ cx: seen.arrow ? seen.arrow.cx : null, cy: seen.arrow ? seen.arrow.cy : null, mem: JSON.parse(snap) });
+	rows.push({
+		cx: seen.arrow ? seen.arrow.cx : null,
+		cy: seen.arrow ? seen.arrow.cy : null,
+		mem: JSON.parse(snap),
+	});
 	if (i < Number(SAMPLES) - 1) {
 		await key2("keyDown", pulseLeft ? "ArrowLeft" : "ArrowRight");
 		await sleep(450);
@@ -79,7 +114,12 @@ for (let i = 0; i < Number(SAMPLES); i++) {
 await key("keyUp");
 
 const usable = rows.filter((r) => r.cx !== null);
-const report = { offsetMb: Number(OFF_MB), samples: rows.length, withCue: usable.length, candidates: [] };
+const report = {
+	offsetMb: Number(OFF_MB),
+	samples: rows.length,
+	withCue: usable.length,
+	candidates: [],
+};
 if (usable.length >= 4) {
 	const n = usable.length;
 	const xs = usable.map((r) => r.cx);
@@ -101,18 +141,34 @@ if (usable.length >= 4) {
 	const width = usable[0].mem.length;
 	for (let k = 0; k < width; k++) {
 		const col = usable.map((r) => r.mem[k]);
-		if (col.some((v) => !Number.isFinite(v) || Math.abs(v) > 100000)) continue;
+		if (col.some((v) => !Number.isFinite(v) || Math.abs(v) > 100000))
+			continue;
 		if (new Set(col).size < 3) continue;
 		const rx = corr(col, xs);
 		const ry = corr(col, ys);
 		if (Math.abs(rx) > 0.8 || Math.abs(ry) > 0.8) {
-			report.candidates.push({ byteOffset: OFF + k * 4, rX: +rx.toFixed(2), rY: +ry.toFixed(2), values: col.map((v) => +v.toFixed(2)) });
+			report.candidates.push({
+				byteOffset: OFF + k * 4,
+				rX: +rx.toFixed(2),
+				rY: +ry.toFixed(2),
+				values: col.map((v) => +v.toFixed(2)),
+			});
 		}
 	}
-	report.candidates.sort((a, b) => Math.max(Math.abs(b.rX), Math.abs(b.rY)) - Math.max(Math.abs(a.rX), Math.abs(a.rY)));
+	report.candidates.sort(
+		(a, b) =>
+			Math.max(Math.abs(b.rX), Math.abs(b.rY)) -
+			Math.max(Math.abs(a.rX), Math.abs(a.rY)),
+	);
 	report.candidates = report.candidates.slice(0, 8);
 }
 
 fs.writeFileSync(`${DIR}/cuecorr.json`, JSON.stringify(report, null, 2));
-console.log(JSON.stringify({ ...report, candidates: report.candidates.slice(0, 5) }, null, 2));
+console.log(
+	JSON.stringify(
+		{ ...report, candidates: report.candidates.slice(0, 5) },
+		null,
+		2,
+	),
+);
 ws.close();

@@ -30,14 +30,30 @@ const send = (method, params = {}) =>
 		q.set(n, r);
 		ws.send(JSON.stringify({ id: n, method, params }));
 	});
-const ev = async (x) => (await send("Runtime.evaluate", { expression: x, returnByValue: true, awaitPromise: true })).result.value;
+const ev = async (x) =>
+	(
+		await send("Runtime.evaluate", {
+			expression: x,
+			returnByValue: true,
+			awaitPromise: true,
+		})
+	).result.value;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const key = (type) => send("Input.dispatchKeyEvent", { type, key: "ArrowUp", code: "ArrowUp", windowsVirtualKeyCode: 38, nativeVirtualKeyCode: 38 });
+const key = (type) =>
+	send("Input.dispatchKeyEvent", {
+		type,
+		key: "ArrowUp",
+		code: "ArrowUp",
+		windowsVirtualKeyCode: 38,
+		nativeVirtualKeyCode: 38,
+	});
 
 await send("Page.enable");
 
 const read = () =>
-	ev(`(()=>{const m=window.__nfsu2.session.proc.memory;const out={};for(const off of ${JSON.stringify(SPOTS)}){out[off]=Array.from(new Float32Array(m.buffer,off,4)).map(v=>+v.toFixed(2))}return JSON.stringify(out)})()`);
+	ev(
+		`(()=>{const m=window.__nfsu2.session.proc.memory;const out={};for(const off of ${JSON.stringify(SPOTS)}){out[off]=Array.from(new Float32Array(m.buffer,off,4)).map(v=>+v.toFixed(2))}return JSON.stringify(out)})()`,
+	);
 
 // Parked: no input at all.
 const parkedA = JSON.parse(await read());

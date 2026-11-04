@@ -2,22 +2,117 @@
 	"$comment": "The ingestion: every field we can hand a decision model, and where it comes from. Addresses are the port's own (runtime/roam_game.c); a field whose source is 'memory' is read directly, one whose source is 'frame' comes from a captured screenshot.",
 	"version": 1,
 	"state": {
-		"speed_kmh": { "type": "number", "source": "memory", "address": "car+0x430", "unit": "km/h", "range": [0, 400], "note": "signed forward speed, absolute value taken" },
-		"gear": { "type": "integer", "source": "memory", "address": "car+0x434", "range": [-1, 6], "note": "-1 reverse, 0 neutral" },
-		"rpm": { "type": "integer", "source": "memory", "address": "car+0x440", "range": [0, 12000] },
-		"heading_degrees": { "type": "number", "source": "memory", "address": "car+0x40c", "unit": "deg", "range": [0, 360], "note": "u16, 65536 a turn" },
-		"position": { "type": "array", "items": "number", "length": 3, "source": "memory", "address": "car+0x60", "unit": "m", "note": "world space" },
-		"velocity": { "type": "array", "items": "number", "length": 3, "source": "memory", "address": "car+0x70", "unit": "m/s" },
-		"yaw_rate": { "type": "number", "source": "memory", "address": "car+0x110", "unit": "rad/s" },
-		"steer": { "type": "number", "source": "memory", "address": "ctl+0x1e0", "range": [-1, 1], "note": "front wheel angle, left positive" },
-		"surface": { "type": "array", "items": "integer", "length": 4, "source": "memory", "address": "car+0x394", "note": "per wheel: 1 road, 8 dirt, 15 grass" },
-		"slip": { "type": "array", "items": "number", "length": 8, "source": "memory", "address": "car+0x3b4", "unit": "m/s", "note": "per wheel, along and across" },
-		"grounded": { "type": "array", "items": "boolean", "length": 4, "source": "memory", "address": "car+0x390" },
-		"racetype": { "type": "integer", "source": "memory", "address": "0x0089e7b0", "note": "0 free roam, 1 race, 7 outrun, 8 dyno" },
-		"track": { "type": "integer", "source": "memory", "address": "0x0089e7a0", "note": "4000 free roam, 4701.. URL races" },
-		"route_cue_x": { "type": "number", "source": "frame", "range": [0, 1], "note": "the route arrow's screen x, 0.5 centred; null when it is not on screen" },
-		"route_cue_pixels": { "type": "integer", "source": "frame", "note": "cluster size, a proxy for how sure the detection is" },
-		"road_band_motion": { "type": "number", "source": "frame", "note": "mean absolute difference of the bottom strip between frames: parked 0.5-0.8, driving 14-32" }
+		"speed_kmh": {
+			"type": "number",
+			"source": "memory",
+			"address": "car+0x430",
+			"unit": "km/h",
+			"range": [0, 400],
+			"note": "signed forward speed, absolute value taken"
+		},
+		"gear": {
+			"type": "integer",
+			"source": "memory",
+			"address": "car+0x434",
+			"range": [-1, 6],
+			"note": "-1 reverse, 0 neutral"
+		},
+		"rpm": {
+			"type": "integer",
+			"source": "memory",
+			"address": "car+0x440",
+			"range": [0, 12000]
+		},
+		"heading_degrees": {
+			"type": "number",
+			"source": "memory",
+			"address": "car+0x40c",
+			"unit": "deg",
+			"range": [0, 360],
+			"note": "u16, 65536 a turn"
+		},
+		"position": {
+			"type": "array",
+			"items": "number",
+			"length": 3,
+			"source": "memory",
+			"address": "car+0x60",
+			"unit": "m",
+			"note": "world space"
+		},
+		"velocity": {
+			"type": "array",
+			"items": "number",
+			"length": 3,
+			"source": "memory",
+			"address": "car+0x70",
+			"unit": "m/s"
+		},
+		"yaw_rate": {
+			"type": "number",
+			"source": "memory",
+			"address": "car+0x110",
+			"unit": "rad/s"
+		},
+		"steer": {
+			"type": "number",
+			"source": "memory",
+			"address": "ctl+0x1e0",
+			"range": [-1, 1],
+			"note": "front wheel angle, left positive"
+		},
+		"surface": {
+			"type": "array",
+			"items": "integer",
+			"length": 4,
+			"source": "memory",
+			"address": "car+0x394",
+			"note": "per wheel: 1 road, 8 dirt, 15 grass"
+		},
+		"slip": {
+			"type": "array",
+			"items": "number",
+			"length": 8,
+			"source": "memory",
+			"address": "car+0x3b4",
+			"unit": "m/s",
+			"note": "per wheel, along and across"
+		},
+		"grounded": {
+			"type": "array",
+			"items": "boolean",
+			"length": 4,
+			"source": "memory",
+			"address": "car+0x390"
+		},
+		"racetype": {
+			"type": "integer",
+			"source": "memory",
+			"address": "0x0089e7b0",
+			"note": "0 free roam, 1 race, 7 outrun, 8 dyno"
+		},
+		"track": {
+			"type": "integer",
+			"source": "memory",
+			"address": "0x0089e7a0",
+			"note": "4000 free roam, 4701.. URL races"
+		},
+		"route_cue_x": {
+			"type": "number",
+			"source": "frame",
+			"range": [0, 1],
+			"note": "the route arrow's screen x, 0.5 centred; null when it is not on screen"
+		},
+		"route_cue_pixels": {
+			"type": "integer",
+			"source": "frame",
+			"note": "cluster size, a proxy for how sure the detection is"
+		},
+		"road_band_motion": {
+			"type": "number",
+			"source": "frame",
+			"note": "mean absolute difference of the bottom strip between frames: parked 0.5-0.8, driving 14-32"
+		}
 	},
 	"derived": {
 		"stuck": "speed_kmh < 2 for three consecutive ticks while the throttle is held",

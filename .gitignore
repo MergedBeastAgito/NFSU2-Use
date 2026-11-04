@@ -1,5 +1,6 @@
 # Rust build output
 App/driver/target/
+App/reader/target/
 **/*.rlib
 **/*.working
 
@@ -14,6 +15,10 @@ postest.json
 memread.json
 memscan.json
 state.json
+
+# What the reader's own harnesses write when they run against this machine.
+App/reader/Test/report.json
+App/reader/Test/ring.json
 
 # Node
 node_modules/

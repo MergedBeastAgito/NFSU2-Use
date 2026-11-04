@@ -40,19 +40,23 @@ pub struct Gate {
 
 impl Gate {
 	/// A gate, with the threshold clamped into the range a probability has.
-	pub fn New(Threshold:f64) -> Self {
-		Self { Threshold:Threshold.clamp(0.0, 1.0) }
-	}
+	pub fn New(Threshold:f64) -> Self { Self { Threshold:Threshold.clamp(0.0, 1.0) } }
 
-	/// The rule decision, annotated with what the model said, and replaced by it
-	/// only when the answer clears the gate.
+	/// The rule decision, annotated with what the model said, and replaced by
+	/// it only when the answer clears the gate.
 	///
 	/// The rule decision is the argument rather than something rebuilt here, so
 	/// that every path out of this function differs from the rules by exactly
 	/// the annotation it carries. That is what makes "a bad token behaves like
 	/// rules-only" a property rather than a hope.
 	pub fn Apply(&self, Rule:Decision, Advice:&Advice, Car:&Car, TargetKmh:f64) -> Decision {
-		let Said = format!("{} {} {:.0}% c{:.2}", Advice.Model, Advice.Action, Advice.Probability * 100.0, Advice.Confidence);
+		let Said = format!(
+			"{} {} {:.0}% c{:.2}",
+			Advice.Model,
+			Advice.Action,
+			Advice.Probability * 100.0,
+			Advice.Confidence
+		);
 
 		// Backing out of a wall is the one manoeuvre the model cannot judge: it
 		// is a reaction to being stuck over several ticks, and the state the
@@ -87,9 +91,9 @@ impl Gate {
 /// The action word as the driver would perform it.
 ///
 /// The model's vocabulary is wider than the driver's: `throttle` and `hold` are
-/// the same action with the throttle on and off, and `brake` is the same key the
-/// rule engine uses to reverse, held while the car is still moving forward. An
-/// unknown word is `None`, never a nearest match - a model that invents an
+/// the same action with the throttle on and off, and `brake` is the same key
+/// the rule engine uses to reverse, held while the car is still moving forward.
+/// An unknown word is `None`, never a nearest match - a model that invents an
 /// option is a model whose answer is not understood.
 fn Perform(Word:&str, Car:&Car, TargetKmh:f64) -> Option<Step> {
 	match Word {

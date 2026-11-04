@@ -18,7 +18,8 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 
-const [TARGET, PORT = "9222", TICKS = "0", INTERVAL = "150"] = process.argv.slice(2);
+const [TARGET, PORT = "9222", TICKS = "0", INTERVAL = "150"] =
+	process.argv.slice(2);
 const DIR = ".";
 const PY = "python3";
 const TRACE = `${DIR}/drive4-trace.jsonl`;
@@ -46,7 +47,13 @@ ws.onmessage = (e) => {
 	const m = JSON.parse(e.data);
 	if (m.method === "Page.screencastFrame") {
 		latestFrame = m.params.data;
-		ws.send(JSON.stringify({ id: ++id, method: "Page.screencastFrameAck", params: { sessionId: m.params.sessionId } }));
+		ws.send(
+			JSON.stringify({
+				id: ++id,
+				method: "Page.screencastFrameAck",
+				params: { sessionId: m.params.sessionId },
+			}),
+		);
 		return;
 	}
 	const s = q.get(m.id);
@@ -61,14 +68,33 @@ const send = (method, params = {}) =>
 		q.set(n, r);
 		ws.send(JSON.stringify({ id: n, method, params }));
 	});
-const ev = async (x) => (await send("Runtime.evaluate", { expression: x, returnByValue: true, awaitPromise: true })).result.value;
+const ev = async (x) =>
+	(
+		await send("Runtime.evaluate", {
+			expression: x,
+			returnByValue: true,
+			awaitPromise: true,
+		})
+	).result.value;
 const sleep = (ms) => new Promise((r) => setTimeout(r, Math.max(0, ms)));
 const VK = { ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40 };
 const key = (type, name) =>
-	send("Input.dispatchKeyEvent", { type, key: name, code: name, windowsVirtualKeyCode: VK[name], nativeVirtualKeyCode: VK[name] });
+	send("Input.dispatchKeyEvent", {
+		type,
+		key: name,
+		code: name,
+		windowsVirtualKeyCode: VK[name],
+		nativeVirtualKeyCode: VK[name],
+	});
 
 await send("Page.enable");
-await send("Page.startScreencast", { format: "jpeg", quality: 55, maxWidth: 1058, maxHeight: 470, everyNthFrame: 1 });
+await send("Page.startScreencast", {
+	format: "jpeg",
+	quality: 55,
+	maxWidth: 1058,
+	maxHeight: 470,
+	everyNthFrame: 1,
+});
 
 await ev(`(()=>{
   window.__car = () => {
@@ -110,13 +136,20 @@ let stopped = false;
 
 const release = async () => {
 	stopped = true;
-	for (const k of ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]) await key("keyUp", k);
+	for (const k of ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])
+		await key("keyUp", k);
 	await send("Page.stopScreencast").catch(() => {});
 };
 for (const sig of ["SIGINT", "SIGTERM"]) {
 	process.on(sig, async () => {
 		await release();
-		console.log(JSON.stringify({ stopped: sig, ticks, maxSpeed: +maxSpeed.toFixed(1) }));
+		console.log(
+			JSON.stringify({
+				stopped: sig,
+				ticks,
+				maxSpeed: +maxSpeed.toFixed(1),
+			}),
+		);
 		process.exit(0);
 	});
 }
@@ -125,7 +158,9 @@ const started = Date.now();
 while (!stopped && (Number(TICKS) === 0 || ticks < Number(TICKS))) {
 	const t0 = Date.now();
 	ticks++;
-	const mode = await ev("window.__mode || (window.__hermesDebug && window.__hermesDebug.mode) || 'memory'");
+	const mode = await ev(
+		"window.__mode || (window.__hermesDebug && window.__hermesDebug.mode) || 'memory'",
+	);
 	const car = JSON.parse(await ev("JSON.stringify(window.__car())"));
 	const speed = car ? car.speed : 0;
 	maxSpeed = Math.max(maxSpeed, Math.abs(speed));
@@ -139,7 +174,9 @@ while (!stopped && (Number(TICKS) === 0 || ticks < Number(TICKS))) {
 		const args = [`${DIR}/analyze_frame.py`, frame, "--json"];
 		if (prevFrame) args.push("--prev", prevFrame);
 		prevFrame = frame;
-		const seen = JSON.parse(spawnSync(PY, args, { encoding: "utf8" }).stdout || "{}");
+		const seen = JSON.parse(
+			spawnSync(PY, args, { encoding: "utf8" }).stdout || "{}",
+		);
 		if (seen.arrow) {
 			rawCx = seen.arrow.cx;
 			seenPixels = seen.arrow.pixels || 0;
@@ -152,7 +189,10 @@ while (!stopped && (Number(TICKS) === 0 || ticks < Number(TICKS))) {
 	} else {
 		cueAge++;
 	}
-	const usable = cue !== null && cueAge <= CUE_HOLD_TICKS && (mode === "gps" || mode === "race");
+	const usable =
+		cue !== null &&
+		cueAge <= CUE_HOLD_TICKS &&
+		(mode === "gps" || mode === "race");
 	lost = usable ? 0 : lost + 1;
 
 	let label = "coast";
@@ -160,7 +200,11 @@ while (!stopped && (Number(TICKS) === 0 || ticks < Number(TICKS))) {
 	let steerKey = null;
 	let throttleDuty = 0;
 	let brakeMs = 0;
-	const targetSpeed = usable ? (rawCx !== null && cue !== null && cue < 0.35 ? 15 : 9) : CRUISE;
+	const targetSpeed = usable
+		? rawCx !== null && cue !== null && cue < 0.35
+			? 15
+			: 9
+		: CRUISE;
 
 	if (mode === "ui") {
 		label = "unsupported";
@@ -195,7 +239,7 @@ while (!stopped && (Number(TICKS) === 0 || ticks < Number(TICKS))) {
 			if (ramp > 0) {
 				ramp--;
 				steerKey = rampDir > 0 ? "ArrowRight" : "ArrowLeft";
-				steerDuty = 0.35 + 0.25 * (3 - ramp) / 3;
+				steerDuty = 0.35 + (0.25 * (3 - ramp)) / 3;
 				label = "roam turn";
 			} else if (lost % 10 === 0) {
 				ramp = 3;
@@ -241,9 +285,31 @@ while (!stopped && (Number(TICKS) === 0 || ticks < Number(TICKS))) {
 
 	await publish({
 		car: car || {},
-		auto: { on: true, ticks, steering: 0, reversing: 0, braking: 0, searching: 0, mode },
-		arrowData: { cx: cue === null ? null : +cue.toFixed(3), cy: null, none: cue === null, pixels: seenPixels },
-		decision: { tick: ticks, action: label, ms: Math.round(steerDuty * STEER_WINDOW), cx: cue === null ? null : +cue.toFixed(3), cy: null, band: null, reason: `duty ${steerDuty.toFixed(2)} · thr ${throttleDuty.toFixed(2)} · ${Math.round(Math.abs(speed) * 3.6)} km/h`, held: true },
+		auto: {
+			on: true,
+			ticks,
+			steering: 0,
+			reversing: 0,
+			braking: 0,
+			searching: 0,
+			mode,
+		},
+		arrowData: {
+			cx: cue === null ? null : +cue.toFixed(3),
+			cy: null,
+			none: cue === null,
+			pixels: seenPixels,
+		},
+		decision: {
+			tick: ticks,
+			action: label,
+			ms: Math.round(steerDuty * STEER_WINDOW),
+			cx: cue === null ? null : +cue.toFixed(3),
+			cy: null,
+			band: null,
+			reason: `duty ${steerDuty.toFixed(2)} · thr ${throttleDuty.toFixed(2)} · ${Math.round(Math.abs(speed) * 3.6)} km/h`,
+			held: true,
+		},
 		_label: label,
 		_note: `${Math.round(throttleDuty * 100)}%`,
 	});
@@ -251,7 +317,35 @@ while (!stopped && (Number(TICKS) === 0 || ticks < Number(TICKS))) {
 }
 
 await release();
-await publish({ auto: { on: false, ticks, steering: 0, reversing: 0, braking: 0, searching: 0, mode: "idle" } });
-const status = JSON.parse((await send("Runtime.evaluate", { expression: "JSON.stringify(window.__nfsu2.session.input.status())", returnByValue: true })).result.value);
-console.log(JSON.stringify({ ticks, maxSpeed: +maxSpeed.toFixed(1), seconds: Math.round((Date.now() - started) / 1000), status }, null, 2));
+await publish({
+	auto: {
+		on: false,
+		ticks,
+		steering: 0,
+		reversing: 0,
+		braking: 0,
+		searching: 0,
+		mode: "idle",
+	},
+});
+const status = JSON.parse(
+	(
+		await send("Runtime.evaluate", {
+			expression: "JSON.stringify(window.__nfsu2.session.input.status())",
+			returnByValue: true,
+		})
+	).result.value,
+);
+console.log(
+	JSON.stringify(
+		{
+			ticks,
+			maxSpeed: +maxSpeed.toFixed(1),
+			seconds: Math.round((Date.now() - started) / 1000),
+			status,
+		},
+		null,
+		2,
+	),
+);
 ws.close();

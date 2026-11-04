@@ -46,13 +46,23 @@ const send = (method, params = {}) =>
 		ws.send(JSON.stringify({ id: n, method, params }));
 	});
 const ev = async (x) => {
-	const res = await send("Runtime.evaluate", { expression: x, returnByValue: true, awaitPromise: true });
+	const res = await send("Runtime.evaluate", {
+		expression: x,
+		returnByValue: true,
+		awaitPromise: true,
+	});
 	if (res.exceptionDetails) throw new Error(res.exceptionDetails.text);
 	return res.result.value;
 };
 
 if (FLAG === "--off") {
-	console.log(JSON.stringify({ removed: await ev("(()=>{const had=!!window.__bus;delete window.__bus;return had?1:0})()") }));
+	console.log(
+		JSON.stringify({
+			removed: await ev(
+				"(()=>{const had=!!window.__bus;delete window.__bus;return had?1:0})()",
+			),
+		}),
+	);
 	ws.close();
 	process.exit(0);
 }
@@ -85,5 +95,11 @@ const out = await ev(`(()=>{
   return JSON.stringify({ installed: true, tables: Object.keys(Tables), depth: DEPTH });
 })()`);
 
-console.log(JSON.stringify({ page: page.url, target: TARGET, ...JSON.parse(out) }, null, 2));
+console.log(
+	JSON.stringify(
+		{ page: page.url, target: TARGET, ...JSON.parse(out) },
+		null,
+		2,
+	),
+);
 ws.close();

@@ -20,10 +20,11 @@ stateDiagram-v2
     Releasing --> [*]
 ```
 
-`Observing` is a single `Evaluate` that returns the car. `Deciding` is either the
-rule engine alone (`power = user`), the rule engine plus a model's opinion
-(`agentic`), or the model's answer alone (`model`). `Acting` holds keys through an
-in-page 16 ms interval, so a tick costs one round trip rather than one per key.
+`Observing` is a single `Evaluate` that returns the car. `Deciding` is either
+the rule engine alone (`power = user`), the rule engine plus a model's opinion
+(`agentic`), or the model's answer alone (`model`). `Acting` holds keys through
+an in-page 16 ms interval, so a tick costs one round trip rather than one per
+key.
 
 ---
 
@@ -65,8 +66,8 @@ stateDiagram-v2
 ```
 
 Nothing is injected through the DOM: the page's own input API writes the game's
-input ring, so a held key is a page-side interval and not a stream of CDP events.
-That is why Agentic needed no input verb, and why the whole loop is two
+input ring, so a held key is a page-side interval and not a stream of CDP
+events. That is why Agentic needed no input verb, and why the whole loop is two
 `Evaluate` calls per tick - one to read, one to act.
 
 ---
@@ -76,13 +77,13 @@ That is why Agentic needed no input verb, and why the whole loop is two
 Each lane is a state, not a request: the fields a question reads, and nothing
 else.
 
-| lane | fields | when |
-| --- | --- | --- |
-| `drive` | speed_kmh, gear, route_cue_x | every tick |
-| `corner` | speed_kmh, heading_degrees, route_cue_x, yaw_rate | approaching a turn |
-| `recover` | speed_kmh, gear, grounded, surface | stuck or slipping |
-| `race` | speed_kmh, gear, racetype, track, route_cue_x | racetype 1 or 7 |
-| `context` | the full sixteen | judgement, not control |
+| lane      | fields                                            | when                   |
+| --------- | ------------------------------------------------- | ---------------------- |
+| `drive`   | speed_kmh, gear, route_cue_x                      | every tick             |
+| `corner`  | speed_kmh, heading_degrees, route_cue_x, yaw_rate | approaching a turn     |
+| `recover` | speed_kmh, gear, grounded, surface                | stuck or slipping      |
+| `race`    | speed_kmh, gear, racetype, track, route_cue_x     | racetype 1 or 7        |
+| `context` | the full sixteen                                  | judgement, not control |
 
 Measured on `clef-flash` with the same question: 375 input tokens for `drive`,
 499 for `context`. The lanes buy tokens and honesty about what each question
@@ -92,10 +93,10 @@ reads; speed comes from cadence, not from a smaller body.
 
 ## 5. What comes back
 
-A `choice` question returns the chosen option and a probability for every option;
-a `score` question returns a weighted value and its legend. Nothing is free text,
-so nothing has to be parsed - and a parse failure at 40 km/h is not a failure
-mode this design has.
+A `choice` question returns the chosen option and a probability for every
+option; a `score` question returns a weighted value and its legend. Nothing is
+free text, so nothing has to be parsed - and a parse failure at 40 km/h is not a
+failure mode this design has.
 
 Measured on the `freeroam.track_cue` template: the model chose `throttle` for
 both a left and a right cue, with probabilities within 0.09 of each other. That
@@ -109,4 +110,5 @@ rules keep the car.
 `Templates/` is data, not code: `Observation.json` names the fields and their
 addresses, `Questions.json` names the lanes and the typed questions. A driver
 reads them at runtime, so a template can be changed without rebuilding the crate
+
 - which is the point of keeping them out of the binary.

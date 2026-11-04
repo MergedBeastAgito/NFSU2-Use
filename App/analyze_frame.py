@@ -28,7 +28,11 @@ def cyan_mask(px, w, h):
         row = []
         for x in range(w):
             r, g, b = px[x, y]
-            row.append(1 if (b >= CYAN_MIN_B and b - r >= CYAN_DOMINANCE and g >= CYAN_MIN_G) else 0)
+            row.append(
+                1
+                if (b >= CYAN_MIN_B and b - r >= CYAN_DOMINANCE and g >= CYAN_MIN_G)
+                else 0
+            )
         mask.append(row)
     return mask
 
@@ -51,11 +55,23 @@ def clusters(mask, w, h, min_pixels=60):
                 x0, x1 = min(x0, cx), max(x1, cx)
                 y0, y1 = min(y0, cy), max(y1, cy)
                 for nx, ny in ((cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)):
-                    if 0 <= nx < w and 0 <= ny < h and mask[ny][nx] and not seen[ny][nx]:
+                    if (
+                        0 <= nx < w
+                        and 0 <= ny < h
+                        and mask[ny][nx]
+                        and not seen[ny][nx]
+                    ):
                         seen[ny][nx] = 1
                         stack.append((nx, ny))
             if count >= min_pixels:
-                found.append({"pixels": count, "box": [x0, y0, x1, y1], "cx": (x0 + x1) / 2 / w, "cy": (y0 + y1) / 2 / h})
+                found.append(
+                    {
+                        "pixels": count,
+                        "box": [x0, y0, x1, y1],
+                        "cx": (x0 + x1) / 2 / w,
+                        "cy": (y0 + y1) / 2 / h,
+                    }
+                )
     found.sort(key=lambda c: -c["pixels"])
     return found
 

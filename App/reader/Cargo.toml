@@ -1,0 +1,23 @@
+[package]
+name = "nfsu-reader"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Reads the NFSU2 browser port's car state from inside its own WebAssembly memory, without JavaScript."
+
+# A cdylib and nothing else: the artefact is a .wasm module that the page
+# instantiates beside the game's own instance, importing its memory.
+[lib]
+name = "NfsuReader"
+path = "Source/Library.rs"
+crate-type = ["cdylib"]
+
+# `panic = "abort"`: a panic becomes a wasm trap, which the page catches as a
+# JavaScript exception. It cannot unwind into the game, and it cannot call an
+# allocator on the way out.
+[profile.release]
+panic = "abort"
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
