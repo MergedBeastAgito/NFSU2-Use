@@ -52,7 +52,7 @@ struct Scripted {
 	/// Every expression sent with a deadline that had already passed.
 	Expired:Mutex<Vec<String>>,
 	/// What the state read answers.
-	Reading:Value,
+	Reading:Mutex<Value>,
 	/// Whether the session let the page go.
 	Closed:AtomicBool,
 }
@@ -62,10 +62,17 @@ impl Scripted {
 		Self {
 			Sent:Mutex::new(Vec::new()),
 			Expired:Mutex::new(Vec::new()),
-			Reading:Reading(),
+			Reading:Mutex::new(Reading()),
 			Closed:AtomicBool::new(false),
 		}
 	}
+
+	/// Answer every later state read with this car.
+	///
+	/// Behind a lock rather than a plain field because the page is held as the
+	/// adapter holds it - one `Arc`, no way to reach a `&mut` - and a test that
+	/// could not change the car could only ever drive the cruising branch.
+	fn Answer(&self, Car:Value) { *self.Reading.lock().unwrap_or_else(|Poison| Poison.into_inner()) = Car; }
 
 	/// Every expression sent so far.
 	fn Sent(&self) -> Vec<String> { self.Sent.lock().unwrap_or_else(|Poison| Poison.into_inner()).clone() }
@@ -109,7 +116,11 @@ impl Browse for Scripted {
 		// The expression is compared against the one the crate bakes in, not
 		// against a copy of it: a test that matched on a string literal would
 		// pass while the adapter sent something else.
-		let Answer = if Expression == State() { self.Reading.clone() } else { Value::Null };
+		let Answer = if Expression == State() {
+			self.Reading.lock().unwrap_or_else(|Poison| Poison.into_inner()).clone()
+		} else {
+			Value::Null
+		};
 		Box::pin(async move { Ok(Answer) })
 	}
 
@@ -195,6 +206,51 @@ async fn one_call_reads_the_state_and_answers_it() {
 	assert!(
 		Sent.iter().any(|One| One == &AgenticNfsuDriver::Hold("ArrowUp", true)),
 		"{Sent:?}"
+	);
+}
+
+#[tokio::test]
+async fn a_reverse_tick_holds_the_reverse_key_and_a_steering_key() {
+	// A car that is not moving: three ticks under 2 km/h is what the stall rule
+	// answers, so the third call is the reverse this card was filed about.
+	let (Held, Page) = held(Policy::default());
+	Page.Answer(json!({
+		"car": 1,
+		"pos": [0.0, 0.0, 0.0],
+		"heading": 0.0,
+		"speed": 0.0,
+		"kmh": 0.0,
+		"rpm": 800,
+		"gear": 2
+	}));
+	for _ in 0..3 {
+		Held.Call(&Policy::default().Text(), Bounded())
+			.await
+			.expect("the tick answered");
+	}
+
+	// The six expressions of the third tick: one read, four keys, one paint.
+	// They are the expressions the page was actually sent, so this is what the
+	// driver holds rather than what the decision says about itself.
+	let Sent = Page.Sent();
+	let Tick = &Sent[Sent.len() - 6..];
+	assert!(
+		Tick.contains(&AgenticNfsuDriver::Hold("ArrowDown", true)),
+		"the reverse key is not held: {Tick:?}"
+	);
+	let Left = Tick.contains(&AgenticNfsuDriver::Hold("ArrowLeft", true));
+	let Right = Tick.contains(&AgenticNfsuDriver::Hold("ArrowRight", true));
+	assert!(Left != Right, "exactly one steering key is held while backing out: {Tick:?}");
+	// The throttle is the key that must be released: reversing with the
+	// throttle on is a car fighting itself.
+	assert!(
+		Tick.contains(&AgenticNfsuDriver::Hold("ArrowUp", false)),
+		"the throttle is still held: {Tick:?}"
+	);
+	// And the trace says the same thing the keys do.
+	assert!(
+		Tick.last().expect("a publish").contains("reverse left"),
+		"{Tick:?}"
 	);
 }
 

@@ -4,6 +4,13 @@
 //! game never receives; the reason is carried beside it because a trace that
 //! says "steer left" without the cue that caused it cannot be argued with.
 //!
+//! An action is a *set* of keys, not one key. Backing out of a corner is the
+//! reverse key and a steering key at once, so those two facts cannot be stored
+//! apart: a decision that named only the gear would be a claim about steering
+//! the driver never made. That claim is what this file used to make, and the
+//! shape below is what makes it unrepresentable - there is no reverse action
+//! that holds one key, so there is nothing for a comment to disagree with.
+//!
 //! The model's two numbers travel with the decision even when they changed
 //! nothing: a gated answer that is invisible in the trace cannot be argued with
 //! either, and the overlay is where a person watches the gate work.
@@ -21,8 +28,10 @@ pub enum Action {
 	Cruise,
 	/// Slow down, which is the same key as reversing held while still moving.
 	Brake,
-	/// Back out of something.
-	Reverse,
+	/// Back out of something, turning left as it goes.
+	ReverseLeft,
+	/// Back out of something, turning right as it goes.
+	ReverseRight,
 	/// The selected mode has no implementation yet.
 	Unsupported,
 }
@@ -36,20 +45,72 @@ impl Action {
 			Action::Centred => "centred",
 			Action::Cruise => "cruise",
 			Action::Brake => "brake",
-			Action::Reverse => "reverse",
+			Action::ReverseLeft => "reverse left",
+			Action::ReverseRight => "reverse right",
 			Action::Unsupported => "unsupported",
 		}
 	}
 
-	/// The key this action holds, if any.
-	pub const fn Key(self) -> Option<&'static str> {
+	/// Whether this action is a way out of being stuck.
+	///
+	/// One predicate rather than a comparison against one variant: the two
+	/// reverses are the same manoeuvre with a different hand on the wheel, and
+	/// a caller that named only one of them would gate the other one.
+	pub const fn Reversing(self) -> bool { matches!(self, Action::ReverseLeft | Action::ReverseRight) }
+
+	/// The keys this action holds, apart from the throttle.
+	///
+	/// The throttle is the one key no action names: it is the decision's own
+	/// field, because whether to press it is a fact about the target speed
+	/// rather than about the manoeuvre.
+	pub const fn Keys(self) -> Keys {
 		match self {
-			Action::SteerLeft => Some("ArrowLeft"),
-			Action::SteerRight => Some("ArrowRight"),
-			Action::Brake => Some("ArrowDown"),
-			Action::Reverse => Some("ArrowDown"),
-			_ => None,
+			Action::SteerLeft => Keys { Left:true, ..Keys::None() },
+			Action::SteerRight => Keys { Right:true, ..Keys::None() },
+			// The two that back out: the reverse key *and* a steering key, so
+			// the car leaves the wall instead of reversing into it again.
+			Action::ReverseLeft => Keys { Left:true, Down:true, ..Keys::None() },
+			Action::ReverseRight => Keys { Right:true, Down:true, ..Keys::None() },
+			Action::Brake => Keys { Down:true, ..Keys::None() },
+			Action::Centred | Action::Cruise | Action::Unsupported => Keys::None(),
 		}
+	}
+}
+
+/// The keys one tick holds, one field per key the game's input ring knows.
+///
+/// A value rather than four arguments, because the four are asserted together
+/// every tick and a caller that passed three of them would hold a key the
+/// decision never asked for.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Keys {
+	/// `ArrowUp`.
+	pub Throttle:bool,
+	/// `ArrowLeft`.
+	pub Left:bool,
+	/// `ArrowRight`.
+	pub Right:bool,
+	/// `ArrowDown`, which brakes while moving and reverses from a stop.
+	pub Down:bool,
+}
+
+impl Keys {
+	/// No keys held.
+	pub const fn None() -> Self { Self { Throttle:false, Left:false, Right:false, Down:false } }
+
+	/// The same set as the name-and-state pairs the driver asserts, in the
+	/// order it asserts them.
+	///
+	/// The names live here and only here: the adapter loops over this array
+	/// instead of naming the four keys itself, so what a test asserts is the
+	/// set the page is actually sent.
+	pub const fn Pairs(self) -> [(&'static str, bool); 4] {
+		[
+			("ArrowUp", self.Throttle),
+			("ArrowLeft", self.Left),
+			("ArrowRight", self.Right),
+			("ArrowDown", self.Down),
+		]
 	}
 }
 
@@ -80,6 +141,9 @@ impl Decision {
 	pub fn Rule(Action:Action, Throttle:bool, Duty:f64, Reason:String) -> Self {
 		Self { Action, Throttle, Duty, Reason, Probability:None, Confidence:None, Obeyed:false }
 	}
+
+	/// The keys this decision holds: the action's own, plus the throttle.
+	pub fn Keys(&self) -> Keys { Keys { Throttle:self.Throttle, ..self.Action.Keys() } }
 
 	/// The same decision, carrying what the model said without acting on it.
 	pub fn Noted(mut self, Probability:f64, Confidence:f64) -> Self {

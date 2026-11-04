@@ -6,7 +6,9 @@
 
 #![allow(non_snake_case)]
 
-use AgenticNfsuDriver::{Action, Advice, Budget, Car, Decision, Fail, Gate, ParseAdvice};
+use AgenticNfsuDriver::{
+	Action, Advice, BackTicks, Budget, Car, Carry, DecideAction, Decision, Fail, Gate, ParseAdvice,
+};
 
 /// A car doing 42 km/h: under the 45 target, so the throttle is expected on.
 fn Driving() -> Car { Car { Address:1, Kmh:42.0, Gear:3, Heading:12.5, ..Car::default() } }
@@ -25,6 +27,107 @@ fn Said(Word:&str, Probability:f64, Confidence:f64) -> Advice {
 
 /// What the rules decided, before the model was asked.
 fn Rules() -> Decision { Decision::Rule(Action::SteerLeft, true, 0.42, "cue 0.440".into()) }
+
+/// A car that is not moving: the state the stall rule exists for.
+fn Stuck() -> Car { Car { Address:1, Kmh:0.0, Gear:2, Heading:0.0, ..Car::default() } }
+
+/// Every action the vocabulary has, so a guard can walk all of them rather than
+/// the ones this file happened to remember.
+const EVERY:[Action; 8] = [
+	Action::SteerLeft,
+	Action::SteerRight,
+	Action::Centred,
+	Action::Cruise,
+	Action::Brake,
+	Action::ReverseLeft,
+	Action::ReverseRight,
+	Action::Unsupported,
+];
+
+#[test]
+fn a_stalled_car_reverses_while_it_steers() {
+	let mut Carry = Carry::default();
+	// Three ticks under 2 km/h is what stuck means, and the third is the
+	// decision that answers it.
+	let Decision = (0..3)
+		.map(|_| DecideAction(&Stuck(), None, 40.0, &mut Carry))
+		.last()
+		.expect("three ticks");
+	assert!(Decision.Action.Reversing(), "{}", Decision.Action.Name());
+
+	// The point of the rule: a reverse holds the reverse key *and* a steering
+	// key, or a car against a wall reverses into it again.
+	let Keys = Decision.Keys();
+	assert!(Keys.Down, "the reverse key is held: {Keys:?}");
+	assert!(Keys.Left != Keys.Right, "exactly one steering key is held: {Keys:?}");
+	assert!(!Keys.Throttle, "backing out does not hold the throttle: {Keys:?}");
+
+	// The trace and the key set are one fact: the reason is built from the
+	// action's own name, so a comment cannot claim a manoeuvre the keys do not
+	// perform.
+	assert!(Decision.Reason.contains(Decision.Action.Name()), "{}", Decision.Reason);
+}
+
+#[test]
+fn the_stall_rule_takes_a_side_and_the_other_one_next_time() {
+	let mut Carry = Carry::default();
+	let mut Sides = Vec::new();
+	for _ in 0..2 {
+		let Stall = (0..3)
+			.map(|_| DecideAction(&Stuck(), None, 40.0, &mut Carry))
+			.last()
+			.expect("three ticks");
+		Sides.push(Stall.Action);
+		// The rest of the manoeuvre keeps the side it started on: a reverse
+		// that wandered between sides would be a car sawing at a wall.
+		for _ in 0..BackTicks {
+			let Tick = DecideAction(&Stuck(), None, 40.0, &mut Carry);
+			assert_eq!(Tick.Action, Stall.Action, "{}", Tick.Reason);
+		}
+	}
+	assert_eq!(Sides, [Action::ReverseLeft, Action::ReverseRight], "the sides alternate");
+}
+
+#[test]
+fn no_action_reverses_without_steering() {
+	for Action in EVERY {
+		let Keys = Action.Keys();
+		if !Action.Reversing() {
+			// `Brake` is the same key held while still moving forward, so it
+			// is the one non-reversing action that holds `ArrowDown`.
+			assert!(!Keys.Down || Action == Action::Brake, "{}", Action.Name());
+			continue;
+		}
+		assert!(Keys.Down, "{} backs up without the reverse key", Action.Name());
+		assert!(Keys.Left != Keys.Right, "{} reverses without steering", Action.Name());
+	}
+}
+
+#[test]
+fn a_tick_holds_the_four_keys_the_page_is_sent() {
+	// The names and the order are the driver's, so what this asserts is the set
+	// the page receives - not a set this test invented.
+	assert_eq!(
+		Decision::Rule(Action::ReverseLeft, false, 0.8, "stalled: reverse left".into())
+			.Keys()
+			.Pairs(),
+		[
+			("ArrowUp", false),
+			("ArrowLeft", true),
+			("ArrowRight", false),
+			("ArrowDown", true),
+		]
+	);
+	assert_eq!(
+		Decision::Rule(Action::Cruise, true, 0.0, "no cue".into()).Keys().Pairs(),
+		[
+			("ArrowUp", true),
+			("ArrowLeft", false),
+			("ArrowRight", false),
+			("ArrowDown", false),
+		]
+	);
+}
 
 #[test]
 fn gate_keeps_the_rules_below_the_threshold() {
@@ -59,9 +162,9 @@ fn gate_refuses_an_option_the_driver_cannot_perform() {
 
 #[test]
 fn gate_never_overrides_a_reversal() {
-	let Reversing = Decision::Rule(Action::Reverse, false, 0.8, "stalled: reversing".into());
+	let Reversing = Decision::Rule(Action::ReverseLeft, false, 0.8, "stalled: reverse left".into());
 	let Decision = Gate::New(0.5).Apply(Reversing, &Said("steer_left", 0.99, 1.0), &Driving(), 45.0);
-	assert_eq!(Decision.Action, Action::Reverse);
+	assert_eq!(Decision.Action, Action::ReverseLeft);
 	assert!(!Decision.Obeyed);
 	assert!(Decision.Reason.contains("gated (reversing)"), "{}", Decision.Reason);
 }

@@ -42,13 +42,13 @@ pub mod Struct;
 pub use crate::{
 	Fn::{
 		Cloudflare::{Advice, Advise as AdviseCloudflare, Fail, Parse as ParseAdvice},
-		Decide::Decide as DecideAction,
+		Decide::{BackTicks, Carry, Decide as DecideAction},
 		Expressions::{Bootstrap, Hold, Publish, Release, State},
 		Gate::Gate,
 	},
 	Struct::{
 		Budget::Budget,
-		Decision::{Action, Decision},
+		Decision::{Action, Decision, Keys},
 		Driver::Driver,
 		Policy::Policy,
 		State::Car,

@@ -61,7 +61,7 @@ impl Gate {
 		// Backing out of a wall is the one manoeuvre the model cannot judge: it
 		// is a reaction to being stuck over several ticks, and the state the
 		// model is shown has no history in it.
-		if Rule.Action == Action::Reverse {
+		if Rule.Action.Reversing() {
 			let Reason = format!("{} · {Said} gated (reversing)", Rule.Reason);
 			return Rule.Noted(Advice.Probability, Advice.Confidence).Explain(Reason);
 		}

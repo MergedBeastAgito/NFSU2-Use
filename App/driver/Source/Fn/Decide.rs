@@ -17,27 +17,58 @@ const StuckTicks:u32 = 3;
 /// How many ticks to spend backing out.
 pub const BackTicks:u32 = 5;
 
+/// What the rules carry from one tick to the next.
+///
+/// A value rather than three counters in the signature: they are written
+/// together, read together, and three `&mut u32` in a row is a call whose
+/// arguments can be swapped without the compiler minding.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Carry {
+	/// How many ticks in a row the car has not moved.
+	pub Stalled:u32,
+	/// How many ticks are left backing out of something.
+	pub Back:u32,
+	/// How many times the stall rule has fired.
+	pub Reversals:u32,
+}
+
 /// Decide one tick.
 ///
 /// The order matters: backing out overrides everything, because a car against a
 /// wall cannot be steered out of it; then the stall test; then the cue; and
-/// only then plain cruising. Reversing steers while it backs, which is the
+/// only then plain cruising.
+///
+/// Backing out steers, and the side alternates. With no cue there is no
+/// evidence which side the way out is on - the car's own heading and the wall
+/// it is against are all the state there is - so the rule does not pretend to
+/// know: it takes a side, and the other side on the next attempt. That is the
 /// difference between leaving a wall and reversing into it again.
-pub fn Decide(Car:&Car, Cue:Option<f64>, TargetKmh:f64, Stalled:&mut u32, Back:&mut u32) -> Decision {
-	if *Back > 0 {
-		*Back -= 1;
-		return Decision::Rule(Action::Reverse, false, 0.8, format!("backing out · {:.0} km/h", Car.Kmh));
+pub fn Decide(Car:&Car, Cue:Option<f64>, TargetKmh:f64, Carry:&mut Carry) -> Decision {
+	if Carry.Back > 0 {
+		Carry.Back -= 1;
+		return Decision::Rule(
+			Backing(Carry.Reversals),
+			false,
+			0.8,
+			format!("backing out · {:.0} km/h", Car.Kmh),
+		);
 	}
 
 	if Car.Kmh < StuckKmh {
-		*Stalled += 1;
+		Carry.Stalled += 1;
 	} else {
-		*Stalled = 0;
+		Carry.Stalled = 0;
 	}
-	if *Stalled >= StuckTicks {
-		*Stalled = 0;
-		*Back = BackTicks;
-		return Decision::Rule(Action::Reverse, false, 0.8, "stalled: reversing".into());
+	if Carry.Stalled >= StuckTicks {
+		Carry.Stalled = 0;
+		Carry.Back = BackTicks;
+		Carry.Reversals += 1;
+		return Decision::Rule(
+			Backing(Carry.Reversals),
+			false,
+			0.8,
+			format!("stalled: {}", Backing(Carry.Reversals).Name()),
+		);
 	}
 
 	if let Some(Cue) = Cue {
@@ -60,4 +91,13 @@ pub fn Decide(Car:&Car, Cue:Option<f64>, TargetKmh:f64, Stalled:&mut u32, Back:&
 		0.0,
 		format!("no cue · {:.0} km/h", Car.Kmh),
 	)
+}
+
+/// The way out of being stuck, for one attempt.
+///
+/// Odd attempts turn left and even ones right, so a car that reverses into the
+/// same wall twice has tried both sides of it. The attempt number is the only
+/// state that needs to survive, and the caller keeps it.
+fn Backing(Attempt:u32) -> Action {
+	if Attempt % 2 == 1 { Action::ReverseLeft } else { Action::ReverseRight }
 }

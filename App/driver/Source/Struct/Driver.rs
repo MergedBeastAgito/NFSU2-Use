@@ -51,7 +51,12 @@ use AgenticSdk::{
 use serde_json::{Value, json};
 
 use crate::{
-	Fn::{Cloudflare::Advise as AdviseCloudflare, Decide::Decide as DecideAction, Expressions, Gate::Gate},
+	Fn::{
+		Cloudflare::Advise as AdviseCloudflare,
+		Decide::{Carry, Decide as DecideAction},
+		Expressions,
+		Gate::Gate,
+	},
 	Struct::{Budget::Budget, Policy::Policy, State::Car},
 };
 
@@ -76,10 +81,10 @@ pub const RequestInvalid:&str = "request-invalid";
 struct Run {
 	/// Ticks this adapter has performed.
 	Tick:u32,
-	/// How many ticks in a row the car has not moved.
-	Stalled:u32,
-	/// How many ticks are left backing out of something.
-	Back:u32,
+	/// The stall counter, the ticks left backing out, and how many times the
+	/// stall rule has fired - which is what decides which side the next reverse
+	/// turns.
+	Carry:Carry,
 }
 
 /// One substrate behind `agentic.adapter`: the NFSU2 browser port, driven from
@@ -184,7 +189,7 @@ impl Driver {
 			// guard itself would be two mutable borrows of the guard.
 			let Run = &mut *Guard;
 			Run.Tick += 1;
-			let Decision = DecideAction(&Car, Policy.Cue, Policy.TargetKmh, &mut Run.Stalled, &mut Run.Back);
+			let Decision = DecideAction(&Car, Policy.Cue, Policy.TargetKmh, &mut Run.Carry);
 			(Run.Tick, Decision)
 		};
 
@@ -214,12 +219,11 @@ impl Driver {
 			}
 		}
 
-		for (Key, On) in [
-			("ArrowUp", Decision.Throttle),
-			("ArrowLeft", Decision.Action.Key() == Some("ArrowLeft")),
-			("ArrowRight", Decision.Action.Key() == Some("ArrowRight")),
-			("ArrowDown", Decision.Action.Key() == Some("ArrowDown")),
-		] {
+		// The keys come from the decision as one set, never from a switch of
+		// this file's own: a reverse tick holds the reverse key and a steering
+		// key, and a loop here that named the keys itself would be a second
+		// opinion about what the decision meant.
+		for (Key, On) in Decision.Keys().Pairs() {
 			self.Evaluate(&Expressions::Hold(Key, On), Bounded.clone()).await?;
 		}
 
