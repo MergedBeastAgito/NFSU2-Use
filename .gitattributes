@@ -1,0 +1,13 @@
+# Sources stay LF. core.autocrlf is true on this machine, and a CRLF checkout
+# breaks a shebang (`env: bash\r`) and diffs every line on a Linux consumer.
+* text=auto eol=lf
+
+*.rs   text eol=lf
+*.ts   text eol=lf
+*.mjs  text eol=lf
+*.js   text eol=lf
+*.py   text eol=lf
+*.md   text eol=lf
+*.toml text eol=lf
+*.json text eol=lf
+*.sh   text eol=lf
