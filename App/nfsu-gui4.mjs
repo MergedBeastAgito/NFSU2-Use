@@ -249,10 +249,13 @@ function paint() {
   );
 
   set(obsBody,
-    'speed  ' + (car.kmh === undefined ? '?' : car.kmh) + ' km/h  gear ' + (car.gear === undefined ? '?' : car.gear) + '\\n' +
-    'rpm    ' + (car.rpm === undefined ? '?' : car.rpm) + '  race ' + (car.racetype === undefined ? '?' : car.racetype) + '\\n' +
+    'speed  ' + (car.kmh === undefined ? '?' : car.kmh) + ' km/h  gear ' + (car.gear === undefined ? '?' : car.gear) + '  rpm ' + (car.rpm === undefined ? '?' : car.rpm) + '\\n' +
+    'race   ' + (car.racetype === undefined ? '?' : car.racetype) + '  steer ' + (car.steer === undefined ? '?' : car.steer) + '  yaw ' + (car.yawRate === undefined ? '?' : car.yawRate) + '\\n' +
     'heading ' + (car.heading === undefined ? '?' : car.heading) + '\\n' +
-    'pos    ' + (car.pos ? car.pos.join(', ') : '?')
+    'pos    ' + (car.pos ? car.pos.join(', ') : '?') + '\\n' +
+    'vel    ' + (car.vel ? car.vel.join(', ') : '?') + '\\n' +
+    'surface ' + (car.surface ? car.surface.join(',') : '?') + '  ground ' + (car.grounded ? car.grounded.map(g => g ? '1' : '0').join('') : '?') + '\\n' +
+    'slip   ' + (car.slip ? car.slip.join(',') : '?')
   );
   const cue = (a.cx === null || a.cx === undefined) ? 'none' : (a.cx + ' , ' + (a.cy === null ? '-' : a.cy));
   const px = a.pixels || 0;

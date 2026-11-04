@@ -20,9 +20,8 @@ import fs from "node:fs";
 
 const [TARGET, PORT = "9222", TICKS = "0", INTERVAL = "150"] =
 	process.argv.slice(2);
-const DIR = ".";
 const PY = "python3";
-const TRACE = `${DIR}/drive4-trace.jsonl`;
+const DIR = new URL(".", import.meta.url).pathname;
 const CRUISE = Number(process.env.HERMES_CRUISE || "12");
 const TURN_SPEED = Number(process.env.HERMES_TURN_SPEED || "7");
 const EMA = 0.35;
@@ -103,7 +102,14 @@ await ev(`(()=>{
     const player = u32(0x00d00000); const car = player ? u32(player + 4) : 0;
     if (!car) return null;
     return { car, pos: [+f32(car+0x60).toFixed(1), +f32(car+0x64).toFixed(1), +f32(car+0x68).toFixed(1)],
+      vel: [+f32(car+0x70).toFixed(2), +f32(car+0x74).toFixed(2), +f32(car+0x78).toFixed(2)],
+      yawRate: +f32(car+0x110).toFixed(3),
+      steer: +(dv.getInt16(u32(car+0x30) + 0x1e0, true) / 32767).toFixed(3),
+      surface: [0,1,2,3].map(k => dv.getUint32(car+0x394 + 4*k, true)),
+      slip: [0,1,2,3,4,5,6,7].map(k => +f32(car+0x3b4 + 4*k).toFixed(2)),
+      grounded: [0,1,2,3].map(k => !!dv.getUint8(car+0x390 + k)),
       heading: +(u16(car+0x40c)/65536*360).toFixed(1), speed: +f32(car+0x430).toFixed(2),
+      rpm: Math.round(f32(car+0x440)),
       kmh: Math.round(Math.abs(f32(car+0x430))*3.6), gear: dv.getInt8(car+0x434), racetype: u32(${G_RACETYPE}) };
   };
   return 1;
@@ -120,7 +126,7 @@ const publish = async (payload) => {
 	await send("Runtime.evaluate", { expression, returnByValue: true });
 };
 
-fs.writeFileSync(TRACE, "");
+// No trace file: the bus is the record now (see nfsu-bus.mjs).
 let prevFrame = null;
 let cue = null;
 let cueAge = 99;
