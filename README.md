@@ -31,22 +31,30 @@ here is one `Evaluate`.
 ## Layout
 
 ```
-driver/                     the Rust crate (an extension beside Agentic)
-  Source/Library.rs         crate doc, modules, re-exports
-  Source/Main.rs            the composition root and the loop
-  Source/Fn/                Decide, Cloudflare, Expressions, Gate
-  Source/Struct/            State, Decision, Budget
-  Source/Script/Expressions one .ts file per expression the page runs
-  build.rs                  compiles those scripts into OUT_DIR/Script
-  module.json               the manifest Agentic's vocabulary already reads
-  ADAPTER.md                the adapter surface Agentic does not have yet
+App/                        the application: what runs
+  driver/                   the Rust crate (an extension beside Agentic)
+    Source/Library.rs       crate doc, modules, re-exports
+    Source/Main.rs          the composition root and the loop
+    Source/Fn/              Decide, Cloudflare, Expressions, Gate
+    Source/Struct/          State, Decision, Budget
+    Source/Script/Expressions  one .ts file per expression the page runs
+    build.rs                compiles those scripts into OUT_DIR/Script
+    module.json             the manifest Agentic's vocabulary already reads
+    ADAPTER.md              the adapter surface Agentic does not have yet
+  nfsu-drive4.mjs           the JS driver: duty-cycle steering, hysteretic throttle
+  nfsu-gui4.mjs             HUD, observations, decisions, power and pipe switches
+  nfsu-lane.mjs             the pipeline lane: SEND → RECEIVE → APPLIED → TRACE
+  nfsu-bus.mjs              in-page tables and subscriptions (no .jsonl)
+  nfsu-state.mjs            the memory reader, standalone
+  analyze_frame.py          arrow detection and road-band motion
 
-nfsu-drive4.mjs             the JS driver: duty-cycle steering, hysteretic throttle
-nfsu-gui4.mjs               HUD, observations, decisions, power and pipe switches
-nfsu-lane.mjs               the pipeline lane: SEND → RECEIVE → APPLIED → TRACE
-nfsu-bus.mjs                in-page tables and subscriptions (no .jsonl)
-nfsu-state.mjs              the memory reader, standalone
-analyze_frame.py            arrow detection and road-band motion
+Templates/                  data, read at runtime - never compiled in
+  Observation.json          every field we can send, with its source address
+  Questions.json            five lanes and seven typed question templates
+  README.md                 how a template composes into a request
+
+Documentation/
+  StateCharts.md            the tick, the send/receive contract, the pipe into the game
 ```
 
 ---
