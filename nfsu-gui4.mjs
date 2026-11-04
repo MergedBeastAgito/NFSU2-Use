@@ -142,6 +142,51 @@ pipeBtn.dataset.pipe = 'toggle'; S(pipeBtn, BTN);
 pipeBtn.addEventListener('click', () => { window.__pipe = window.__pipe === 'on' ? 'off' : 'on'; paint(true) });
 pipeEl.appendChild(pipeBtn);
 
+// Three pipes, each independently switchable, because a remote decision model is
+// billed per call and a local one costs only cycles:
+//   LOCAL   the rules engine (always available, free)
+//   REMOTE  Cloudflare Clef (pricey, per token)
+//   PIPE    the wire itself - off means no request is made at all
+window.__local = window.__local || 'on';
+window.__remote = window.__remote || 'on';
+const SWITCHES = [
+  {id:'local',  label:'LOCAL',  get:()=>window.__local,  set:(v)=>{window.__local=v}},
+  {id:'remote', label:'REMOTE', get:()=>window.__remote, set:(v)=>{window.__remote=v}},
+  {id:'pipe',   label:'PIPE',   get:()=>window.__pipe,   set:(v)=>{window.__pipe=v}},
+];
+const switchEl = S(document.createElement('div'), 'display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin:3px 0');
+dec.insertBefore(switchEl, pipeEl);
+const switchBtns = {};
+for (const s of SWITCHES) {
+  const b = document.createElement('button');
+  b.dataset.switch = s.id; S(b, BTN);
+  b.addEventListener('click', () => { s.set(s.get() === 'on' ? 'off' : 'on'); paint(true) });
+  switchEl.appendChild(b); switchBtns[s.id] = b;
+}
+
+// Knobs for the settings a person actually tunes while watching it drive.
+const KNOBS = [
+  {id:'target', label:'target km/h', value:45, min:5, max:120, step:5},
+  {id:'cruise', label:'cruise m/s',  value:12, min:2, max:40,  step:1},
+  {id:'turn',   label:'turn m/s',    value:7,  min:1, max:20,  step:1},
+  {id:'every',  label:'model every', value:10, min:1, max:60,  step:1},
+];
+window.__knobs = window.__knobs || {};
+const knobEl = S(document.createElement('div'), 'display:grid;grid-template-columns:1fr 1fr;gap:3px;margin:3px 0 5px');
+dec.insertBefore(knobEl, pipeEl);
+for (const k of KNOBS) {
+  const cell = S(document.createElement('label'), 'display:flex;justify-content:space-between;gap:4px;color:#8fb8cf;font-size:9px');
+  const name = S(document.createElement('span'), ''); name.textContent = k.label;
+  const input = S(document.createElement('input'), 'width:46px;font:inherit;color:#eaf7ff;background:rgba(255,255,255,.06);border:1px solid rgba(120,220,255,.25);border-radius:3px;pointer-events:auto;text-align:right');
+  input.type = 'number'; input.min = String(k.min); input.max = String(k.max); input.step = String(k.step);
+  input.dataset.knob = k.id;
+  input.value = String(window.__knobs[k.id] !== undefined ? window.__knobs[k.id] : k.value);
+  window.__knobs[k.id] = Number(input.value);
+  input.addEventListener('input', () => { window.__knobs[k.id] = Number(input.value); });
+  cell.appendChild(name); cell.appendChild(input);
+  knobEl.appendChild(cell);
+}
+
 // One row per candidate action; the chosen one is highlighted, so the list reads
 // as "what it considered" rather than only "what it did".
 const ACTIONS = ['steer left','steer right','centred','cruise','roam turn','reverse','unsupported'];
@@ -171,10 +216,20 @@ function paint() {
   // Power and pipe are read from the page every paint, so a click in another
   // tab or a driver flipping them is reflected without a message passing system.
   const Power = window.__power || 'agentic';
+  const Local = window.__local || 'on';
+  const Remote = window.__remote || 'on';
   const Pipe = window.__pipe || 'on';
-  if (D.cache.__power !== Power || D.cache.__pipe !== Pipe) {
-    D.cache.__power = Power; D.cache.__pipe = Pipe;
+  const Key = Power + Local + Remote + Pipe;
+  if (D.cache.__switchKey !== Key) {
+    D.cache.__switchKey = Key;
     for (const p of POWERS) S(powerBtns[p.id], Power === p.id ? BTN_ON : BTN);
+    const States = { local: Local, remote: Remote, pipe: Pipe };
+    for (const s of SWITCHES) {
+      const On = States[s.id] === 'on';
+      const b = switchBtns[s.id];
+      b.textContent = s.label + (On ? ' ON' : ' OFF');
+      S(b, On ? BTN_ON : BTN + ';border-color:rgba(255,120,120,.75);color:#ffb3b3');
+    }
     pipeBtn.textContent = Pipe === 'on' ? 'PIPE ON · click to break' : 'PIPE OFF · click to restore';
     S(pipeBtn, Pipe === 'on' ? BTN_ON : BTN + ';border-color:rgba(255,120,120,.75);color:#ffb3b3');
   }
@@ -182,7 +237,7 @@ function paint() {
   set(hud,
     'HUD ' + ((n && n.phase) || '?') + '  tick ' + (au.ticks || 0) + '\\n' +
     'mode  ' + D.mode + (au.on ? ' ON' : ' OFF') + '\\n' +
-    'power ' + Power + ' · pipe ' + Pipe + '\\n' +
+    'power ' + Power + ' · local ' + Local + ' · remote ' + Remote + ' · pipe ' + Pipe + '\\n' +
     'keys  ' + (st ? st.keysHeld : '?') + '  drop ' + (st ? st.dropped : '?') + '\\n' +
     'gpu   ' + (stats['gpu encode ms'] ? stats['gpu encode ms'].toFixed(2) : '?') + 'ms'
   );
