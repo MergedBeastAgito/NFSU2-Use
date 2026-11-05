@@ -297,16 +297,41 @@ const NOTHING = 'nothing sent yet';
 const wireEl = mk('hermes-wire', BOX + ';right:8px;bottom:8px;width:390px;max-height:46vh;overflow:auto;pointer-events:auto;user-select:text');
 const wireHdr = S(document.createElement('div'), WIRE_HDR); wireHdr.id = 'hw-hdr';
 wireEl.appendChild(wireHdr);
-// Three sections, stacked: the state that was sent, the questions it was asked
-// with, and the reply as it arrived. The first two are drawn from the body
-// rather than printed from it, because a body is a structure and a reader who
-// has to trace braces to find the options is reading the JSON, not the request.
-sec(wireEl, 'STATE SENT');
-const wireState = S(document.createElement('div'), 'margin:0;display:flex;flex-direction:column;gap:1px'); wireState.id = 'hw-state';
-wireEl.appendChild(wireState);
-sec(wireEl, 'QUESTIONS · one lane each');
-const wireLanes = S(document.createElement('div'), 'margin:0;display:flex;flex-direction:column;gap:5px'); wireLanes.id = 'hw-lanes';
-wireEl.appendChild(wireLanes);
+// The panel is a column of typed boxes, built once. A request does not rebuild
+// them, it writes into them: that is what keeps the layout still while the
+// content changes every sixth tick, so a reader's eye stays on the box it was
+// reading and a new lane appearing is the only thing that moves anything.
+//
+// Colour is the type and nothing else - a state is green, a choice cyan, a
+// score violet, the verdict red, the history strip grey - so two boxes of the
+// same colour are the same kind of thing. That is the whole legend, and it is
+// why the colour is a token rather than a mood.
+const TYPE = {
+  state:   '#7fffc4',
+  choice:  '#7fe3ff',
+  score:   '#b79bff',
+  noul:    '#ffd27f',
+  verdict: '#ffb3b3',
+  history: '#8fb8cf',
+};
+const wireBody = S(document.createElement('div'), 'display:flex;flex-direction:column;margin:2px 0 0'); wireBody.id = 'hw-body';
+wireEl.appendChild(wireBody);
+// One box, created once. Its title is a slot too: a lane that changes its
+// question rewrites this text rather than replacing the node.
+function Box(Title, Colour, Parent, Id) {
+  const Frame = S(document.createElement('div'), 'border:1px solid ' + Colour + '44;border-left:2px solid ' + Colour + ';border-radius:4px;padding:2px 5px;margin:0 0 4px;min-width:0');
+  const Head = S(document.createElement('div'), 'color:' + Colour + ';font-size:8px;letter-spacing:.06em;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis');
+  Head.textContent = Title;
+  const Body = S(document.createElement('div'), 'font-size:9px;min-width:0');
+  Frame.appendChild(Head); Frame.appendChild(Body);
+  (Parent || wireBody).appendChild(Frame);
+  if (Id) Frame.id = Id;
+  return { Frame, Head, Body };
+}
+const stateBox = Box('STATE · what was sent', TYPE.state, null, 'hw-state');
+const laneBox = Box('QUESTIONS · one lane each', TYPE.choice, null, 'hw-lanes');
+const verdictBox = Box('VERDICT · what came back', TYPE.verdict, null, 'hw-verdict');
+const historyBox = Box('HISTORY · one column per request', TYPE.history, null, 'hw-history');
 sec(wireEl, 'RECEIVE');
 const wireRecv = S(document.createElement('pre'), WIRE_PRE); wireRecv.id = 'hw-recv';
 wireEl.appendChild(wireRecv);
@@ -340,76 +365,123 @@ const wireWrite = (node, text) => {
   if (D.cache[k] !== empty) { D.cache[k] = empty; S(node, WIRE_PRE + (empty ? ';color:#5f7d95' : '')) }
 };
 
-// The request drawn as what it is: a state and a set of questions, each with
-// the options it allows. A swimlane per question is the shape that shows both
-// halves at once - what the model was allowed to say and which option it took -
-// where a printed body makes a reader trace braces to find either.
+// Every node is created the first time its key appears and reused forever: the
+// state rows by field name, the lane boxes by question id, the chips by option.
+// A request that asks the same question writes new numbers into the same nodes,
+// which is what makes the display still while the content changes under it.
 const CHIP = 'padding:1px 5px;border:1px solid rgba(120,220,255,.18);border-radius:10px;color:#7fa8c0;font-size:9px;white-space:nowrap';
 const CHIP_ON = 'padding:1px 5px;border:1px solid rgba(120,220,255,.9);border-radius:10px;background:rgba(120,220,255,.22);color:#eaf7ff;font-size:9px;white-space:nowrap';
-const LANE_HEAD = 'color:#8fb8cf;font-size:9px;margin-bottom:2px';
 const DIM = 'color:#5f7d95;font-size:9px';
-function drawWire(Send, Recv) {
+D.pool = D.pool || { rows: {}, lanes: {}, verdicts: {}, history: [], blank: null };
+function drawWire(Send, Recv, Wire) {
   let Body = null, Answers = null;
   try { Body = JSON.parse(Send) } catch (e) { Body = null }
   try {
     const R = JSON.parse(Recv);
     Answers = (R && R.result && R.result.answers) || (R && R.answers) || null;
   } catch (e) { Answers = null }
-  const Questions = (Body && Body.questions) || {};
-  // Rebuild only when the drawn thing changes: a lane that is asked every
-  // sixth tick must not rebuild its nodes on the five ticks in between.
-  const Key = JSON.stringify([Body && Body.model, Object.keys(Questions), Answers]);
-  if (D.cache.__wireKey === Key) return;
-  D.cache.__wireKey = Key;
+  const Pool = D.pool;
 
-  wireState.textContent = '';
+  // STATE - a row per field, keyed by name and never rebuilt.
   const State = (Body && Body.state) || {};
   const Fields = Object.keys(State);
-  if (!Fields.length) {
-    const N = S(document.createElement('div'), DIM); N.textContent = NOTHING;
-    wireState.appendChild(N);
+  if (D.cache.__stateEmpty !== !Fields.length) {
+    D.cache.__stateEmpty = !Fields.length;
+    stateBox.Body.textContent = '';
+    if (!Fields.length) { const N = S(document.createElement('div'), DIM); N.textContent = NOTHING; stateBox.Body.appendChild(N) }
   }
-  // One line per field, in the order the corpus names them, so the panel reads
-  // top-down the way the request does.
   for (const F of Fields) {
-    const Row = S(document.createElement('div'), 'display:flex;justify-content:space-between;gap:6px;font-size:9px');
-    const K = S(document.createElement('span'), 'color:#5f7d95'); K.textContent = F;
-    const V = S(document.createElement('span'), 'color:#9fe8ff;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:230px');
-    V.textContent = typeof State[F] === 'string' ? State[F] : JSON.stringify(State[F]);
-    Row.appendChild(K); Row.appendChild(V);
-    wireState.appendChild(Row);
+    let R = Pool.rows[F];
+    if (!R) {
+      const Row = S(document.createElement('div'), 'display:flex;justify-content:space-between;gap:6px');
+      const K = S(document.createElement('span'), 'color:#5f7d95'); K.textContent = F;
+      const V = S(document.createElement('span'), 'color:#9fe8ff;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:210px');
+      V.id = 'hw-v-' + F;
+      Row.appendChild(K); Row.appendChild(V);
+      stateBox.Body.appendChild(Row);
+      R = Pool.rows[F] = { Row, V };
+    }
+    set(R.V, typeof State[F] === 'string' ? State[F] : JSON.stringify(State[F]));
   }
 
-  wireLanes.textContent = '';
+  // QUESTIONS - one box per question id, coloured by the question's own type.
+  const Questions = (Body && Body.questions) || {};
   const Ids = Object.keys(Questions);
   if (!Ids.length) {
-    const N = S(document.createElement('div'), DIM); N.textContent = NOTHING;
-    wireLanes.appendChild(N);
-  }
+    if (!Pool.blank) { Pool.blank = S(document.createElement('div'), DIM); Pool.blank.textContent = NOTHING; laneBox.Body.appendChild(Pool.blank) }
+  } else if (Pool.blank) { Pool.blank.remove(); Pool.blank = null }
   for (const Id of Ids) {
     const Q = Questions[Id] || {};
     const A = Answers && Answers[Id];
-    const Lane = S(document.createElement('div'), 'display:flex;flex-direction:column');
-    const Head = S(document.createElement('div'), LANE_HEAD);
-    Head.textContent = Id + ' · ' + (Q.type || '?') + (Q.instructions ? ' - ' + Q.instructions : '');
-    Lane.appendChild(Head);
-    const Track = S(document.createElement('div'), 'display:flex;flex-wrap:wrap;gap:3px;align-items:center;border-left:1px solid rgba(120,220,255,.18);padding-left:4px');
+    const Colour = TYPE[Q.type] || TYPE.noul;
+    let L = Pool.lanes[Id];
+    if (!L) {
+      const Frame = S(document.createElement('div'), 'border-left:2px solid ' + Colour + ';padding-left:4px;margin:0 0 3px');
+      const Head = S(document.createElement('div'), 'color:' + Colour + ';font-size:9px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis');
+      const Track = S(document.createElement('div'), 'display:flex;flex-wrap:wrap;gap:3px;align-items:center');
+      Frame.appendChild(Head); Frame.appendChild(Track);
+      laneBox.Body.appendChild(Frame);
+      L = Pool.lanes[Id] = { Frame, Head, Track, Sig: '', Chips: {} };
+    }
     const Options = Array.isArray(Q.criteria) ? Q.criteria : Object.keys(Q.criteria || {});
+    set(L.Head, Id + ' · ' + (Q.type || '?') + (Q.instructions ? ' - ' + Q.instructions : ''));
+    // The chips are rebuilt only when the option set itself changes; a new
+    // probability is a text write into a node that is already there.
+    const Sig = Options.join('|');
+    if (L.Sig !== Sig) {
+      L.Sig = Sig; L.Track.textContent = ''; L.Chips = {};
+      Options.forEach((O) => {
+        const Chip = S(document.createElement('span'), CHIP);
+        Chip.id = 'hw-chip-' + Id + '-' + O;
+        L.Track.appendChild(Chip);
+        L.Chips[O] = Chip;
+      });
+      if (!Options.length) { const N = S(document.createElement('span'), DIM); N.textContent = 'no options'; L.Track.appendChild(N) }
+    }
     const Chosen = A && A.choice !== undefined && A.choice !== null ? String(A.choice) : null;
     const Prob = (A && A.probabilities) || {};
     const Position = A && typeof A.score === 'number' ? A.score : null;
     Options.forEach((O, At) => {
-      const Chip = S(document.createElement('span'), CHIP);
+      const Chip = L.Chips[O]; if (!Chip) return;
       // A choice is answered by a word and a score by a position in its legend,
       // so the lit chip is whichever of the two the reply actually carried.
       const Lit = (Chosen !== null && Chosen === String(O)) || (Position !== null && Math.round(Position) === At);
-      if (Lit) S(Chip, CHIP_ON);
-      Chip.textContent = String(O) + (Prob[O] !== undefined ? ' ' + Number(Prob[O]).toFixed(2) : '');
-      Track.appendChild(Chip);
+      set(Chip, String(O) + (Prob[O] !== undefined ? ' ' + Number(Prob[O]).toFixed(2) : ''));
+      const K = Chip.id + ':on';
+      if (D.cache[K] !== Lit) { D.cache[K] = Lit; S(Chip, Lit ? CHIP_ON : CHIP) }
     });
-    if (!Options.length) { const N = S(document.createElement('span'), DIM); N.textContent = 'no options'; Track.appendChild(N) }
-    Lane.appendChild(Track);
-    wireLanes.appendChild(Lane);
+
+    // VERDICT - one line per question. A choice and a score answer differently,
+    // so the line says which it was instead of flattening both into "confidence".
+    let Vd = Pool.verdicts[Id];
+    if (!Vd) {
+      const Row = S(document.createElement('div'), 'display:flex;justify-content:space-between;gap:6px');
+      const K = S(document.createElement('span'), 'color:#5f7d95'); K.textContent = Id;
+      const V = S(document.createElement('span'), 'color:#ffd9d9;text-align:right');
+      V.id = 'hw-verdict-' + Id;
+      Row.appendChild(K); Row.appendChild(V);
+      verdictBox.Body.appendChild(Row);
+      Vd = Pool.verdicts[Id] = { Row, V };
+    }
+    set(Vd.V, A
+      ? (A.choice !== undefined && A.choice !== null
+        ? String(A.choice) + ' ' + (A.probabilities && A.probabilities[A.choice] !== undefined ? Number(A.probabilities[A.choice]).toFixed(2) : '')
+        : (typeof A.score === 'number' ? 'score ' + A.score.toFixed(2) : '-'))
+      : '-');
+  }
+
+  // HISTORY - a column per request, oldest dropped. The lane and the answer
+  // together are what a run reads as: a lane that never wins and an answer that
+  // never clears the gate look identical in one tick and different here.
+  if (Wire && Wire.lane) {
+    const Picked = Answers && Object.keys(Answers).map((K) => Answers[K] && Answers[K].choice).filter(Boolean)[0];
+    const Line = (Wire.lane || '?') + ' · ' + (Picked || '-') + ' · ' + (Wire.ms === undefined ? '?' : Math.round(Wire.ms)) + 'ms';
+    if (Pool.history[Pool.history.length - 1] !== Line) {
+      Pool.history.push(Line);
+      if (Pool.history.length > 8) Pool.history.shift();
+      historyBox.Body.textContent = '';
+      for (const H of Pool.history) { const E = S(document.createElement('div'), 'color:#8fb8cf;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'); E.textContent = H; historyBox.Body.appendChild(E) }
+    }
   }
 }
 
@@ -513,7 +585,7 @@ function paint() {
   set(wireHdr, w
     ? 'WIRE · ' + (wLane || 'lane ?') + ' · ' + (wMs === null ? '?ms' : wMs + 'ms') + (wErr ? ' · ERROR ' + wErr : ' · ok')
     : 'WIRE · idle');
-  drawWire(w ? redact(w.send) : '', w ? redact(w.recv) : '');
+  drawWire(w ? redact(w.send) : '', w ? redact(w.recv) : '', w);
   wireWrite(wireRecv, (w && redact(pretty(w.recv))) || NOTHING);
 
   set(driving, 'driving: ' + Drive + ' · ' + (car.kmh === undefined ? '?' : car.kmh) + ' km/h · ' +
