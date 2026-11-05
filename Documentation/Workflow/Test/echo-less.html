@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>fixture: the question is never accepted</title>
+		<style>
+			body {
+				font: 16px system-ui;
+				margin: 24px;
+			}
+			#composer {
+				border: 1px solid #888;
+				width: 480px;
+				min-height: 24px;
+				padding: 8px;
+			}
+			#submit {
+				margin-top: 8px;
+				padding: 6px 14px;
+			}
+			[data-command-menu-control] {
+				margin-bottom: 8px;
+			}
+			[data-command-menu-control] button {
+				padding: 4px 10px;
+				margin-right: 4px;
+			}
+			.break-words {
+				margin-top: 16px;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>fixture: the question is never accepted</h1>
+		<div data-command-menu-control>
+			<button aria-label="Search" aria-pressed="true">Search</button>
+			<button aria-label="Computer" aria-pressed="false">Computer</button>
+		</div>
+		<div contenteditable="true" id="composer"></div>
+		<button aria-label="submit" disabled id="submit">Submit</button>
+		<!-- A page that swallows the question: the composer empties, and nothing
+		     is ever rendered back, which is what a refused turn looks like. -->
+		<div class="break-words" id="answer">Nothing has been asked yet.</div>
+		<script>
+			const Composer = document.getElementById("composer");
+			const Submit = document.getElementById("submit");
+			Composer.addEventListener("input", () => {
+				Submit.disabled = Composer.innerText.trim().length === 0;
+			});
+			Submit.addEventListener("click", () => {
+				Composer.innerText = "";
+				Submit.disabled = true;
+			});
+		</script>
+	</body>
+</html>

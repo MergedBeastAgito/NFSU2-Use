@@ -2,30 +2,35 @@
 //!
 //! Every rule here is a statement about the car, so it can be read, argued with
 //! and tested without a game running. The browser is the caller's problem.
+//!
+//! The rules read the scene, not the dashboard. That is the one change this file
+//! needed and the reason it is worth reading: a car pressed against a wall
+//! reports its wheel speed, so `km/h` alone cannot tell a car doing forty from a
+//! car doing nothing at all. [`Situation`] can, because it compares where the car
+//! is with where it was.
 
 use crate::Struct::{
 	Decision::{Action, Decision},
+	Situation::Situation,
 	State::Car,
 };
 
 /// How far off centre the cue may be before it is worth steering.
 const Deadzone:f64 = 0.03;
-/// Below this the car is not moving, whatever the throttle says.
-const StuckKmh:f64 = 2.0;
-/// How many stalled ticks in a row mean it is really stuck.
-const StuckTicks:u32 = 3;
 /// How many ticks to spend backing out.
 pub const BackTicks:u32 = 5;
 
 /// What the rules carry from one tick to the next.
 ///
-/// A value rather than three counters in the signature: they are written
-/// together, read together, and three `&mut u32` in a row is a call whose
+/// A value rather than two counters in the signature: they are written
+/// together, read together, and two `&mut u32` in a row is a call whose
 /// arguments can be swapped without the compiler minding.
+///
+/// The stall counter is not here: it belongs to the witness that measures it,
+/// and two owners of one count is how a rule and a measurement start to
+/// disagree.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Carry {
-	/// How many ticks in a row the car has not moved.
-	pub Stalled:u32,
 	/// How many ticks are left backing out of something.
 	pub Back:u32,
 	/// How many times the stall rule has fired.
@@ -35,39 +40,33 @@ pub struct Carry {
 /// Decide one tick.
 ///
 /// The order matters: backing out overrides everything, because a car against a
-/// wall cannot be steered out of it; then the stall test; then the cue; and
-/// only then plain cruising.
+/// wall cannot be steered out of it; then the jam test; then the cue; and only
+/// then plain cruising.
 ///
 /// Backing out steers, and the side alternates. With no cue there is no
 /// evidence which side the way out is on - the car's own heading and the wall
 /// it is against are all the state there is - so the rule does not pretend to
 /// know: it takes a side, and the other side on the next attempt. That is the
 /// difference between leaving a wall and reversing into it again.
-pub fn Decide(Car:&Car, Cue:Option<f64>, TargetKmh:f64, Carry:&mut Carry) -> Decision {
+pub fn Decide(Car:&Car, Scene:&Situation, Cue:Option<f64>, TargetKmh:f64, Carry:&mut Carry) -> Decision {
 	if Carry.Back > 0 {
 		Carry.Back -= 1;
 		return Decision::Rule(
 			Backing(Carry.Reversals),
 			false,
 			0.8,
-			format!("backing out · {:.0} km/h", Car.Kmh),
+			format!("backing out · {:.0} km/h · {}", Car.Kmh, Scene.Word),
 		);
 	}
 
-	if Car.Kmh < StuckKmh {
-		Carry.Stalled += 1;
-	} else {
-		Carry.Stalled = 0;
-	}
-	if Carry.Stalled >= StuckTicks {
-		Carry.Stalled = 0;
+	if Scene.Jammed() {
 		Carry.Back = BackTicks;
 		Carry.Reversals += 1;
 		return Decision::Rule(
 			Backing(Carry.Reversals),
 			false,
 			0.8,
-			format!("stalled: {}", Backing(Carry.Reversals).Name()),
+			format!("stalled: {} · {}", Scene.Word, Scene.Sentence),
 		);
 	}
 

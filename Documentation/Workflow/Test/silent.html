@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>fixture: the answer never grows</title>
+		<style>
+			body {
+				font: 16px system-ui;
+				margin: 24px;
+			}
+			#composer {
+				border: 1px solid #888;
+				width: 480px;
+				min-height: 24px;
+				padding: 8px;
+			}
+			#submit {
+				margin-top: 8px;
+				padding: 6px 14px;
+			}
+			[data-command-menu-control] {
+				margin-bottom: 8px;
+			}
+			[data-command-menu-control] button {
+				padding: 4px 10px;
+				margin-right: 4px;
+			}
+			.break-words {
+				margin-top: 16px;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>fixture: the answer never grows</h1>
+		<div data-command-menu-control>
+			<button aria-label="Search" aria-pressed="true">Search</button>
+			<button aria-label="Computer" aria-pressed="false">Computer</button>
+		</div>
+		<div contenteditable="true" id="composer"></div>
+		<button aria-label="submit" disabled id="submit">Submit</button>
+		<!-- The question comes back, so the echo check passes, and then nothing
+		     grows: the answer never settles and the run must file nothing. -->
+		<div class="break-words" id="answer"></div>
+		<script>
+			const Composer = document.getElementById("composer");
+			const Submit = document.getElementById("submit");
+			const Answer = document.getElementById("answer");
+			Composer.addEventListener("input", () => {
+				Submit.disabled = Composer.innerText.trim().length === 0;
+			});
+			Submit.addEventListener("click", () => {
+				Answer.textContent = Composer.innerText;
+				Composer.innerText = "";
+				Submit.disabled = true;
+			});
+		</script>
+	</body>
+</html>

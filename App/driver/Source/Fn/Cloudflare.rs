@@ -145,7 +145,13 @@ pub fn Parse(Body:&str) -> Result<Advice, Fail> {
 }
 
 /// Ask a model what it would do. `Err` on any failure.
-pub fn Advise(Car:&Car, Cue:Option<f64>, Name:&str) -> Result<Advice, Fail> {
+///
+/// The state is the scene, not the dashboard: the wheel speed is one field of
+/// nine, and the sentence beside it says what the nine add up to. The questions
+/// change with it - an open road is asked about pace and steering, a jammed car
+/// is asked which way out - because the same five options asked at a wall are a
+/// question whose answer is always `throttle`.
+pub fn Advise(Car:&Car, Scene:&Situation, Cue:Option<f64>, Name:&str) -> Result<Advice, Fail> {
 	let Bare = Resolve(Name);
 	let Token = env::var("CLOUDFLARE_API_TOKEN")
 		.ok()
@@ -155,35 +161,72 @@ pub fn Advise(Car:&Car, Cue:Option<f64>, Name:&str) -> Result<Advice, Fail> {
 	let Account = env::var("CLOUDFLARE_ACCOUNT_ID").map_err(|_| Fail::NoAccount)?;
 	let URL = format!("https://api.cloudflare.com/client/v4/accounts/{Account}/ai/run/@cf/cloudflare/{Bare}");
 	let State = json!({
+		"verdict": Scene.Word,
+		"situation": Scene.Sentence,
 		"speed_kmh": Car.Kmh.round(),
 		"gear": Car.Gear,
 		"heading_degrees": Car.Heading,
 		"route_cue_x": Cue,
-		"situation": "free roam on a city road; ghost mode on, so other cars cannot be hit"
+		"moved_m": Scene.Moved,
+		"turned_degrees": Scene.Turned,
+		"blocked_ticks": Scene.Blocked,
 	});
 	let Body = json!({
 		"model": Bare,
 		"state": State,
-		"questions": {
+		"questions": Questions(Scene),
+	});
+	Parse(&Ask(&URL, &Body.to_string(), &Token)?)
+}
+
+/// The questions this tick asks, which the scene decides.
+///
+/// Two shapes and no more. A jammed car is asked which way out, with reversing
+/// written out as an option and said plainly to be the way a car leaves a wall;
+/// an open road is asked about pace and steering, because reversing there would
+/// undo progress the car has already made. Every option is one the gate can
+/// perform - an option the driver has no key for is a question that cannot be
+/// answered, however well the model understands it.
+fn Questions(Scene:&Situation) -> Value {
+	if Scene.Jammed() {
+		return json!({
 			"action": {
 				"type": "choice",
-				"instructions": "What should the driver do next?",
+				"instructions": "The car cannot make progress where it is pointing: the situation field says what it is against, and moved_m is how far it has actually travelled while the throttle was held. Reversing with the wheel turned is how a car leaves a wall; pushing forward again only presses it back into what it hit. Which way should the car go?",
 				"criteria": {
-					"steer_left": "Turn toward the left of the road",
-					"steer_right": "Turn toward the right of the road",
-					"throttle": "Hold the line and keep the throttle down",
-					"brake": "Slow down",
-					"hold": "Do nothing and coast"
+					"reverse_left": "Back out with the wheel turned left: the way out is behind and to the left",
+					"reverse_right": "Back out with the wheel turned right: the way out is behind and to the right",
+					"steer_left": "Turn the wheel left and keep pushing forward",
+					"steer_right": "Turn the wheel right and keep pushing forward",
+					"throttle": "Hold the throttle down and wait for the car to come free",
+					"brake": "Stop and give up on this direction"
 				}
 			},
 			"confidence": {
 				"type": "score",
-				"instructions": "How sure are you of that action?",
+				"instructions": "How sure are you of that way out?",
 				"criteria": ["guessing", "unsure", "fairly sure", "certain"]
 			}
+		});
+	}
+	json!({
+		"action": {
+			"type": "choice",
+			"instructions": "The car is moving on a city road in free roam, with ghost mode on so other cars cannot be hit. route_cue_x is the route arrow's screen position when one is visible - 0.0 far left, 0.5 dead ahead, 1.0 far right - and null when there is no arrow. What should the driver do next?",
+			"criteria": {
+				"steer_left": "Turn toward the left of the road",
+				"steer_right": "Turn toward the right of the road",
+				"throttle": "Hold the line and keep the throttle down",
+				"brake": "Slow down",
+				"hold": "Do nothing and coast"
+			}
+		},
+		"confidence": {
+			"type": "score",
+			"instructions": "How sure are you of that action?",
+			"criteria": ["guessing", "unsure", "fairly sure", "certain"]
 		}
-	});
-	Parse(&Ask(&URL, &Body.to_string(), &Token)?)
+	})
 }
 
 /// One POST, with the token on stdin.

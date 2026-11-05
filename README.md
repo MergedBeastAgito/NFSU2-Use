@@ -62,6 +62,11 @@ Templates/                  data, read at runtime - never compiled in
 
 Documentation/
   StateCharts.md            the tick, the send/receive contract, the pipe into the game
+  Vision.md                 why the schema is the product and NFSU2 is the unit test
+  Research/                 one capture per Perplexity thread, with its question beside it
+  Workflow/                 how a card asks rather than guesses: Research.md is the
+                            procedure, ask.mjs the driver, Test/ the fixtures that
+                            prove its refusals
 ```
 
 ---
