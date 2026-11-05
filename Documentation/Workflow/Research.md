@@ -238,11 +238,10 @@ composer may take to appear), `--timeout`, `--stable`, `--min-answer`, `--cdp`,
 
 ## Why the driver is in the repository
 
-The earlier version of this page named the profile's own drivers
-(`the profile's cdp-send driver` and
-`cdp-read.mjs`) and a tab a person had opened. A clone of this repository inherits
-neither, a headless worker cannot wait for the person, and the profile's
-`cdp-send` does not in fact read the mode toggle its documentation says it
-refuses on. So `ask.mjs` carries the primitives - background target, mode
-assertion, text typing, settlement - inside the repository, where a card can run
-them and a clone can read them.
+The earlier version of this page named the agent profile's own drivers
+(`cdp-send` and `cdp-read`) and a tab a person had opened. A clone of this
+repository inherits neither, a headless worker cannot wait for the person, and
+the profile's `cdp-send` does not in fact read the mode toggle its documentation
+says it refuses on. So `ask.mjs` carries the primitives - background target,
+mode assertion, text typing, settlement - inside the repository, where a card
+can run them and a clone can read them.

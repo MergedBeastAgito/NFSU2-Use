@@ -121,7 +121,10 @@ One measured call: `action: throttle` at 0.5348, confidence 2.12 of 3, 343 input
 tokens and no output tokens - about $0.000013, which is why advice is throttled
 by `--every` rather than asked for on every tick.
 
-The token is read from the environment or `~/.env` and is never printed.
+The token is read from `CLOUDFLARE_API_TOKEN`, or from the dotenv file named by
+`CLOUDFLARE_ENV_FILE`, and is never printed. The account id has no default
+either: `CLOUDFLARE_ACCOUNT_ID` is required, because a hard-coded one would ship
+somebody's account in a public repository.
 
 ---
 

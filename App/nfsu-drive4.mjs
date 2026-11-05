@@ -15,12 +15,16 @@
 //   - roam turns ramp over three ticks instead of one long hold.
 //
 // Usage: node nfsu-drive4.mjs <targetId> [port] [ticks] [intervalMs]
+//
+// The pixel modes shell out to analyze_frame.py, so `PYTHON` names the
+// interpreter that has its imports installed; the default is whatever
+// `python3` is on PATH.
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 
 const [TARGET, PORT = "9222", TICKS = "0", INTERVAL = "150"] =
 	process.argv.slice(2);
-const PY = "python3";
+const PY = process.env.PYTHON || "python3";
 const DIR = new URL(".", import.meta.url).pathname;
 const CRUISE = Number(process.env.HERMES_CRUISE || "12");
 const TURN_SPEED = Number(process.env.HERMES_TURN_SPEED || "7");

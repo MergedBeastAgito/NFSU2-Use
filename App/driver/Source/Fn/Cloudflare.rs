@@ -15,10 +15,15 @@
 //! - an answer reports its own spend in `usage`, so the run meters itself from
 //!   the replies it already has instead of asking twice.
 //!
-//! The token is read from the environment or from `~/.env` and is never
-//! printed, logged or put in an error message. It reaches curl on **stdin**, as
-//! a config line, rather than as an argument: on this machine argv is readable
-//! by every process through `ps`.
+//! The token is read from `CLOUDFLARE_API_TOKEN`, or from the dotenv file named
+//! by `CLOUDFLARE_ENV_FILE`, and is never printed, logged or put in an error
+//! message. It reaches curl on **stdin**, as a config line, rather than as an
+//! argument: argv is readable by every process on the machine through `ps`.
+//!
+//! Neither the token nor the account id has a default. Both are read from the
+//! environment, and their absence is its own error (`Fail::NoToken`,
+//! `Fail::NoAccount`) rather than a fallback: a hard-coded identifier ships
+//! somebody's account in a public repository.
 
 use std::{
 	env,
@@ -68,7 +73,7 @@ pub struct Advice {
 /// the account or the body.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Fail {
-	/// No token in the environment or in Hermes' env file.
+	/// No token in the environment and no dotenv file to read it from.
 	NoToken,
 	/// No account id in the environment. There is no default: an account id is
 	/// an identifier, and a hard-coded one ships somebody's account in a public
@@ -288,10 +293,15 @@ fn Ask(URL:&str, Body:&str, Token:&str) -> Result<String, Fail> {
 	Ok(Payload.to_string())
 }
 
-/// The token from Hermes' own env file, which is where the gateway keeps it.
+/// The token from a dotenv file the caller names with `CLOUDFLARE_ENV_FILE`.
+///
+/// This is the second source, not the default: a process that already exports
+/// `CLOUDFLARE_API_TOKEN` never reaches it, and with the variable unset there
+/// is no file to read and no error to raise - the caller reports
+/// `Fail::NoToken` and the tick carries on.
 fn FromDotEnv() -> Option<String> {
-	let Home = env::var("HOME").ok()?;
-	let Text = fs::read_to_string(format!("{Home}/.env")).ok()?;
+	let Path = env::var("CLOUDFLARE_ENV_FILE").ok()?;
+	let Text = fs::read_to_string(Path).ok()?;
 	Text.lines()
 		.find_map(|Line| {
 			Line.strip_prefix("CLOUDFLARE_API_TOKEN=")

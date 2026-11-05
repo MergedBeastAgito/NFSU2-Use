@@ -16,8 +16,11 @@ path = "Source/Library.rs"
 name = "nfsu-driver"
 path = "Source/Main.rs"
 
-# The facade is what a consumer names, and it is consumed as-is, never modified:
-# the path is absolute because the driver lives outside the Agentic tree.
+# The facade is what a consumer names, and it is consumed as-is, never modified.
+# The path is relative, and it is the one assumption this crate makes about
+# where it sits: Agentic is checked out in the directory that holds the
+# directory holding this repository. A clone that puts it elsewhere edits this
+# line or passes `--config`; nothing here names a machine.
 #
 # One dependency, and no internal package beside it - not even for the `script!`
 # macro this crate's expressions are baked with. The macro comes through the
@@ -25,7 +28,7 @@ path = "Source/Main.rs"
 # facade: a consumer that had to name `agentic-runtime` for one macro would still
 # be pinned to the workspace's internal crate names.
 [dependencies]
-agentic-sdk = { path = "../Agentic/Crate/Sdk" }
+agentic-sdk = { path = "../../../../Agentic/Crate/Sdk" }
 tokio = { version = "1", features = [
 	"rt-multi-thread",
 	"macros",

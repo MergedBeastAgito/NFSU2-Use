@@ -20,11 +20,11 @@ CONTEXT FIRST, then the question.
 
 Repositories involved
 
-NikolaRHristov/NFSU2 (public) — the example adapter: a Rust crate that drives a browser WebAssembly game through Agentic's Browse port (Evaluate only), plus a wasm reader crate, a JS harness (driver, GUI, pipeline lane, in-page bus) and JSON schema templates.
+NikolaRHristov/NFSU2 (public) - the example adapter: a Rust crate that drives a browser WebAssembly game through Agentic's Browse port (Evaluate only), plus a wasm reader crate, a JS harness (driver, GUI, pipeline lane, in-page bus) and JSON schema templates.
 
-Agentic — the framework workspace: Crate/{Agentic,BrowserCDP,ChatDriver,DesignVerification,Runtime,SkillContract,SpacetimeCatalog,Workflow}, each with module.json declaring provides/requires ports.
+Agentic - the framework workspace: Crate/{Agentic,BrowserCDP,ChatDriver,DesignVerification,Runtime,SkillContract,SpacetimeCatalog,Workflow}, each with module.json declaring provides/requires ports.
 
-NikolaRHristov/TimeLine — an Astro site for private bookmark ingestion (a product that installs as an extension).
+NikolaRHristov/TimeLine - an Astro site for private bookmark ingestion (a product that installs as an extension).
 
 Naming conventions (house style, non-negotiable)
 

@@ -25,6 +25,11 @@ node_modules/
 # The game's own source, cloned for reference (not part of this repository)
 Module/
 
+# Credentials: the names travel in App/.env.example, the values never do.
+.env
+.env.*
+!.env.example
+
 # Editor and OS
 .DS_Store
 .idea/
