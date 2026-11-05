@@ -3,9 +3,9 @@
 //! One POST, the credentials it carries, and the reply body it returned. What
 //! the body *means* is not decided here: the request is composed and the reply
 //! parsed by the Lane crate (`agentic.lane.decide`), which reaches a transport
-//! only through its `Poster` seam. This file is the NFSU2 side of that seam - the
-//! token, curl, the status code - and it is the only file in this crate that
-//! opens a socket.
+//! only through its `Poster` seam. This file is the NFSU2 side of that seam -
+//! the token, curl, the status code - and it is the only file in this crate
+//! that opens a socket.
 //!
 //! Two facts about the endpoint are measured, not guessed:
 //!
@@ -14,8 +14,8 @@
 //!   clef is a decision model: it returns a probability for every allowed
 //!   option, not a message. The path belongs to the Lane crate
 //!   (`Fn::Model::Route`); this module is handed a complete URL.
-//! - an answer reports its own spend in `usage`, so a run meters itself from the
-//!   replies it already has instead of asking twice. The meter is the Lane
+//! - an answer reports its own spend in `usage`, so a run meters itself from
+//!   the replies it already has instead of asking twice. The meter is the Lane
 //!   crate's too (`Struct::Budget`), fed from the answer it parses.
 //!
 //! The token is read from `CLOUDFLARE_API_TOKEN`, or from the dotenv file named
@@ -46,16 +46,12 @@ const Host:&str = "https://api.cloudflare.com/client/v4/accounts/";
 ///
 /// The host and the account are the transport's - they say who is being asked -
 /// while the path is the capability's: `/ai/run/@cf/cloudflare/<name>`, which
-/// the Lane crate states once so two callers cannot disagree about which route a
-/// decision model is asked on.
+/// the Lane crate states once so two callers cannot disagree about which route
+/// a decision model is asked on.
 pub fn Endpoint(Account:&str, Path:&str) -> String { format!("{Host}{Account}{Path}") }
 
 /// The account id, when the environment carries one.
-pub fn Account() -> Option<String> {
-	env::var("CLOUDFLARE_ACCOUNT_ID")
-		.ok()
-		.filter(|Account| !Account.is_empty())
-}
+pub fn Account() -> Option<String> { env::var("CLOUDFLARE_ACCOUNT_ID").ok().filter(|Account| !Account.is_empty()) }
 
 /// The token, from the environment first and the named dotenv file second.
 ///
@@ -70,13 +66,33 @@ pub fn Token() -> Option<String> {
 		.filter(|Token| !Token.is_empty())
 }
 
+/// The curl config line that carries the token.
+///
+/// One line of curl's own `-K` grammar, ending in a newline because curl reads
+/// the config from stdin and a last line without one is still a line. It is a
+/// function rather than a `format!` at the write site so that the one place the
+/// token becomes bytes can be asserted without a socket: the URL and the body
+/// reach curl as arguments, and the reply is a child process, so this line is
+/// the only part of a call a test can read at all.
+///
+/// A token that cannot be written as this line is refused, with the same word a
+/// missing token produces, rather than quoted: a `"` would end the header early
+/// and a newline would start a second config line, and both fail silently as a
+/// 401.
+pub fn Header(Token:&str) -> Result<String, String> {
+	if Token.contains(['"', '\n', '\r']) {
+		return Err("no token".into());
+	}
+	Ok(format!("header = \"Authorization: Bearer {Token}\"\n"))
+}
+
 /// One POST, with the token on stdin. The reply body, or a word saying why not.
 ///
 /// The status is appended to stdout by curl itself, so a 401 and a 200 with a
 /// broken body are told apart without a second request. A token that cannot be
-/// written as a curl config line is refused rather than quoted: a `"` or a
-/// newline in it would either break the line or start a new one, and both fail
-/// silently as a 401.
+/// written as a curl config line is refused by [`Header`] before curl is
+/// spawned at all, which is the structural half of "a bad token behaves like
+/// rules-only".
 ///
 /// The failure is a word rather than a type because the enumeration is not this
 /// crate's to make: the Lane crate's `Poster` seam takes a sentence and a
@@ -84,9 +100,7 @@ pub fn Token() -> Option<String> {
 /// words here are the ones a trace already printed, so a failure reads the same
 /// after the move as it did before it.
 pub fn Post(URL:&str, Body:&str, Token:&str) -> Result<String, String> {
-	if Token.contains(['"', '\n', '\r']) {
-		return Err("no token".into());
-	}
+	let Line = Header(Token)?;
 	let mut Child = Command::new("curl")
 		.args([
 			"-s",
@@ -113,11 +127,9 @@ pub fn Post(URL:&str, Body:&str, Token:&str) -> Result<String, String> {
 		// A failed write is curl reading no header, which is the same failure a
 		// missing token has: the call is answered 401 and the rules carry on.
 		//
-		// The token is interpolated here and nowhere else: the format string is
-		// the one place it becomes bytes, and a literal written in its place -
-		// which is what this line once held - sends `Bearer ***` to the endpoint
-		// and answers 401 on every tick while looking like a credential problem.
-		let _ = In.write_all(format!("header = \"Authorization: Bearer {Token}\"\n").as_bytes());
+		// The bytes are [`Header`]'s, so the line curl reads and the line the
+		// test asserts are composed by one function and cannot drift apart.
+		let _ = In.write_all(Line.as_bytes());
 	}
 	let Output = Child.wait_with_output().map_err(|_| "curl unavailable".to_string())?;
 	if Output.status.code() == Some(28) {
@@ -150,4 +162,58 @@ fn FromDotEnv() -> Option<String> {
 				.map(|Value| Value.trim().trim_matches('"').to_string())
 		})
 		.filter(|Token| !Token.is_empty())
+}
+
+// The config line is the whole of a call a test can read: the URL and the body
+// reach curl as arguments and the reply is a child process, so the token's
+// journey into curl's stdin is asserted here, on the bytes, rather than by
+// posting to an endpoint. No socket, no curl, no browser.
+#[cfg(test)]
+mod Tests {
+	use super::{Header, Post};
+
+	/// A token of the shape the endpoint issues: opaque, and long enough that a
+	/// truncated or substituted one would still look like a credential.
+	const Token:&str = "v1.0-abc123def456";
+
+	#[test]
+	fn the_config_line_carries_the_token_it_was_given() {
+		let Line = Header(Token).expect("a token the endpoint issues is a config line");
+		assert_eq!(Line, format!("header = \"Authorization: Bearer {Token}\"\n"));
+		assert!(Line.contains(Token), "the token is in the bytes curl reads · {Line}");
+	}
+
+	#[test]
+	fn the_config_line_is_composed_from_the_token() {
+		// The failure this guards against is a `format!` with no argument:
+		// every token would produce the same line, the endpoint would
+		// answer 401 on every tick, and the trace would look like a bad
+		// credential rather than a missing interpolation. Two tokens
+		// must give two lines.
+		let One = Header("first-token").expect("a config line");
+		let Two = Header("second-token").expect("a config line");
+		assert_ne!(One, Two, "the line is composed from the token, not written beside it");
+		for Line in [One, Two] {
+			assert!(!Line.contains("***"), "a stand-in in the token's place · {Line}");
+		}
+	}
+
+	#[test]
+	fn a_token_that_cannot_be_a_config_line_is_refused() {
+		// A `"` would end the header early and a newline would start a second
+		// config line; either would send something other than the token and be
+		// answered 401, so both are refused with the word a missing token
+		// already produces.
+		for Bad in ["quo\"te", "new\nline", "carriage\rreturn"] {
+			assert_eq!(Header(Bad), Err("no token".to_string()), "{Bad:?} is not a config line");
+		}
+	}
+
+	#[test]
+	fn post_refuses_a_bad_token_before_it_spawns_curl() {
+		// The refusal is the first statement of `Post`, not something curl
+		// reports: a token that cannot be a config line never reaches a child
+		// process, which is what lets this assertion run with no socket.
+		assert_eq!(Post("http://127.0.0.1:1/never", "{}", "quo\"te"), Err("no token".to_string()));
+	}
 }

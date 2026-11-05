@@ -8,19 +8,19 @@
 //! runtime name it imports comes from `agentic-sdk`, the workspace's facade,
 //! and nothing it names belongs to a second Agentic crate.
 //!
-//! Two things bound what the model may change, and both are flags, because a run
-//! that spends money should say how much it may spend before it starts:
+//! Two things bound what the model may change, and both are flags, because a
+//! run that spends money should say how much it may spend before it starts.
 //! `--threshold` is how sure the model must be before its answer replaces the
-//! rules, and `--every` is how often it is asked at all. The run's own ceiling -
-//! requests and tokens - is `--max-requests` and `--max-tokens`, and it is the
+//! rules, and `--every` is how often it is asked at all. The run's own ceiling,
+//! requests and tokens, is `--max-requests` and `--max-tokens`, and it is the
 //! lane decider's meter (`agentic.lane.decide`), which is where the spend is
 //! counted now; the line it prints at exit is the invoice.
 //!
 //! The corpus is the other input a run cannot invent: `--corpus` names the
-//! directory holding `Observation.json` and `Questions.json`, and `NFSU2_CORPUS`
-//! names it when the flag is absent. A corpus that does not load is a warning and
-//! a rules-only run rather than a refusal to start, because the rules are the
-//! driver and the model is the advisor.
+//! directory holding `Observation.json` and `Questions.json`, and
+//! `NFSU2_CORPUS` names it when the flag is absent. A corpus that does not load
+//! is a warning and a rules-only run rather than a refusal to start, because
+//! the rules are the driver and the model is the advisor.
 
 // The house style is PascalCase everywhere - functions, fields, locals - so the
 // lint that disagrees with it is off here as it is in `Source/Library.rs`. The
@@ -33,7 +33,7 @@ use std::{sync::Arc, time::Duration};
 
 use AgenticLane::{Budget, DecidePort, Decider};
 use AgenticNfsuDriver::{Driver, OpenCorpus, Policy};
-use AgenticSdk::{Adapter, Browse, Call, Chrome, ChromeOptions, Clock, Create, Never, OpenOptions, Options, Tokio};
+use AgenticSDK::{Adapter, Browse, Call, Chrome, ChromeOptions, Clock, Create, Never, OpenOptions, Options, Tokio};
 
 /// One argument's value.
 fn Arg(Name:&str) -> Option<String> {
@@ -49,8 +49,8 @@ fn Arg(Name:&str) -> Option<String> {
 ///
 /// A panic inside a spawned task is silent by default: the task dies, whatever
 /// it was serving stays open, and every call that waits on it waits out its own
-/// deadline - so a crashed connection and a slow page are reported with the same
-/// word. This hook is one line on stderr, before that misreport.
+/// deadline - so a crashed connection and a slow page are reported with the
+/// same word. This hook is one line on stderr, before that misreport.
 fn WatchPanics() {
 	std::panic::set_hook(Box::new(|Info| {
 		let Where = Info
@@ -163,28 +163,39 @@ async fn main() -> Result<(), String> {
 	// decider's meter from here on. Nothing in this file counts requests: two
 	// authorities over one invoice is how a spend report starts to lie.
 	let Model:Option<Arc<Decider>> = match &Policy.Model {
-		Some(Name) => match OpenCorpus(Name, Budget::New(Number("--max-requests", 0u32), Number("--max-tokens", 0u64)), Arg("--corpus").as_deref()) {
-			Ok(Decider) => {
-				let Corpus = Decider.Corpus();
-				println!(
-					"corpus {} · {} lanes · {} templates",
-					Corpus.Root().map(|Root| Root.display().to_string()).unwrap_or_else(|| "-".to_string()),
-					Corpus.Lanes().count(),
-					Corpus.Templates().count()
-				);
-				// The conditions are the corpus's, so the line that used to print
-				// the crate's priority now prints what the file says - a run that
-				// selected an unexpected lane is answered by this line and the
-				// `why` beside it, not by reading the source.
-				for Lane in Corpus.Lanes() {
-					println!("lane {:<8} when {}", Lane.Name, Lane.Select.Line());
-				}
-				Some(Decider)
-			},
-			Err(Why) => {
-				println!("corpus · {Why} · the rules drive this run");
-				None
-			},
+		Some(Name) => {
+			match OpenCorpus(
+				Name,
+				Budget::New(Number("--max-requests", 0u32), Number("--max-tokens", 0u64)),
+				Arg("--corpus").as_deref(),
+			) {
+				Ok(Decider) => {
+					let Corpus = Decider.Corpus();
+					println!(
+						"corpus {} · {} lanes · {} templates",
+						Corpus
+							.Root()
+							.map(|Root| Root.display().to_string())
+							.unwrap_or_else(|| "-".to_string()),
+						Corpus.Lanes().count(),
+						Corpus.Templates().count()
+					);
+					// The conditions are the corpus's, so the line that used to
+					// print the crate's priority now prints
+					// what the file says - a run that
+					// selected an unexpected lane is answered by this line and
+					// the `why` beside it, not by reading
+					// the source.
+					for Lane in Corpus.Lanes() {
+						println!("lane {:<8} when {}", Lane.Name, Lane.Select.Line());
+					}
+					Some(Decider)
+				},
+				Err(Why) => {
+					println!("corpus · {Why} · the rules drive this run");
+					None
+				},
+			}
 		},
 		None => None,
 	};
@@ -216,7 +227,7 @@ async fn main() -> Result<(), String> {
 		.map_err(|Why| format!("attach failed: {}", Why.Message()))?;
 	println!(
 		"attached to {} · {} · target {:.0} km/h",
-		Page.Url,
+		Page.URL,
 		Policy.Line(),
 		Policy.TargetKmh
 	);
@@ -225,14 +236,8 @@ async fn main() -> Result<(), String> {
 	// spend is the lane decider's meter, not this value's: a driver that kept a
 	// second count of the same requests would be a second authority over the
 	// same invoice.
-	let Held:Arc<dyn Adapter> = Arc::new(Driver::New(
-		Browser,
-		Page,
-		Policy.clone(),
-		Duration::from_secs(10),
-		Clock,
-		Port,
-	));
+	let Held:Arc<dyn Adapter> =
+		Arc::new(Driver::New(Browser, Page, Policy.clone(), Duration::from_secs(10), Clock, Port));
 	let Request = Policy.Text();
 
 	// The interrupt is a normal ending, not an error: a held throttle survives

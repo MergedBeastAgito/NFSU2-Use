@@ -1,9 +1,9 @@
 //! The corpus this game drives with, and the round trip through it.
 //!
 //! No browser and no socket: the corpus is the real one beside this crate
-//! (`Templates/Observation.json`, `Templates/Questions.json`), the poster answers
-//! from a string, and the port answers from an [`Answer`] a test wrote. What that
-//! proves is the four claims the rewire makes:
+//! (`Templates/Observation.json`, `Templates/Questions.json`), the poster
+//! answers from a string, and the port answers from an [`Answer`] a test wrote.
+//! What that proves is the four claims the rewire makes:
 //!
 //! - **the corpus's own conditions still select the lanes it always did** - one
 //!   representative reading per lane, built by the crate's own [`Observe`], so
@@ -13,10 +13,11 @@
 //!   conditions rather than a rule list beside them;
 //! - **the request is the lane's** - exactly `{model, state, questions}`, the
 //!   lane's fields and no others, posted to the decision route;
-//! - **a failed consultation is not a failed tick** - the lane it chose survives
-//!   in the trace, the rules keep the car, and the word saying why travels;
+//! - **a failed consultation is not a failed tick** - the lane it chose
+//!   survives in the trace, the rules keep the car, and the word saying why
+//!   travels;
 //! - **the adapter that runs in a game is the one under test** - the five lanes
-//!   are driven through [`Http`], this crate's `Poster`, over a transport that
+//!   are driven through [`HTTP`], this crate's `Poster`, over a transport that
 //!   records what it was handed instead of opening a socket. The composition
 //!   assertions are then about the code a run executes, not about a stand-in a
 //!   test wrote to imitate it, and the URL it builds is asserted rather than
@@ -24,8 +25,8 @@
 //!
 //! # Why the five lanes are asserted here rather than in the Lane crate
 //!
-//! `Crate/Lane` refuses to name a caller: its tests build their own corpora. The
-//! names `drive`, `recover`, `corner`, `race` and `context` are this game's
+//! `Crate/Lane` refuses to name a caller: its tests build their own corpora.
+//! The names `drive`, `recover`, `corner`, `race` and `context` are this game's
 //! vocabulary, so the assertion that *this* corpus selects them belongs to the
 //! crate that carries the corpus. The corpus states its own conditions; what is
 //! asserted here is that the conditions a run actually reads select the lanes
@@ -44,12 +45,32 @@ use std::{
 };
 
 use AgenticLane::{
-	Answer, Answered, Budget, Compose, Context, Create, Decider, Error, Failure, Load, Options, Poster, Predicate,
-	Request, Rule, Rules, Select, SelectLane, Selection, State as Reading, Usage, When,
+	Answer,
+	Answered,
+	Budget,
+	Compose,
+	Context,
+	Create,
+	DecidePort,
+	Decider,
+	Error,
+	Failure,
+	Load,
+	Options,
+	Poster,
+	Predicate,
+	Request,
+	Rule,
+	Rules,
+	Select,
+	SelectLane,
+	Selection,
+	State as Reading,
+	Usage,
+	When,
 };
-use AgenticLane::DecidePort;
-use AgenticNfsuDriver::{Car, Consult, Consulted, CorpusRoot, Endpoint, Http, Observe, Situation, TemplateRules};
-use AgenticSdk::{Call, FutureBox, Never, Wall};
+use AgenticNfsuDriver::{Car, Consult, Consulted, CorpusRoot, Endpoint, HTTP, Observe, Situation, TemplateRules};
+use AgenticSDK::{Call, FutureBox, Never, Wall};
 use serde_json::{Value, json};
 
 /// The five lanes the corpus declares, and the template each serves first.
@@ -67,12 +88,20 @@ const LANES:[(&str, &str); 5] = [
 
 /// The observation's fields this crate declares and does not read yet.
 ///
-/// Named rather than described, so a lane that starts sending one of them - or a
-/// field somebody adds to a lane without teaching the ingestion to measure it -
-/// fails the test below instead of travelling as a silent `null`. Adding a
-/// reading means deleting a name from here, which is the review this list exists
-/// to force.
-const UNREAD:[&str; 7] = ["grounded", "road_band_motion", "route_cue_pixels", "slip", "surface", "velocity", "yaw_rate"];
+/// Named rather than described, so that a lane which starts sending one of them
+/// fails the test below instead of travelling as a silent `null`. A field
+/// somebody adds to a lane without teaching the ingestion to measure it is
+/// caught by the same assertion. Adding a reading means deleting a name from
+/// here, which is the review this list exists to force.
+const UNREAD:[&str; 7] = [
+	"grounded",
+	"road_band_motion",
+	"route_cue_pixels",
+	"slip",
+	"surface",
+	"velocity",
+	"yaw_rate",
+];
 
 /// One call's bound. The fakes answer immediately, so this never expires.
 fn Bound() -> Call { Call::Within(Duration::from_secs(5), &Wall, Arc::new(Never)) }
@@ -84,7 +113,16 @@ fn Corpus() -> AgenticLane::Corpus {
 }
 
 /// A car the memory read could have returned.
-fn Car() -> Car { Car { Address:1, Kmh:63.0, Gear:4, Heading:45.0, Position:[12.0, 3.0, 88.0], ..Car::default() } }
+fn Car() -> Car {
+	Car {
+		Address:1,
+		Kmh:63.0,
+		Gear:4,
+		Heading:45.0,
+		Position:[12.0, 3.0, 88.0],
+		..Car::default()
+	}
+}
 
 /// A scene the witness could have reported.
 ///
@@ -200,7 +238,10 @@ fn the_corpus_selects_each_of_the_five_lanes() {
 		Seen.insert(Chosen.Lane.Name.clone());
 	}
 	let Wanted:BTreeSet<String> = LANES.iter().map(|(Name, _)| Name.to_string()).collect();
-	assert_eq!(Seen, Wanted, "the cases exercised {Seen:?}, and all five lanes must be exercised");
+	assert_eq!(
+		Seen, Wanted,
+		"the cases exercised {Seen:?}, and all five lanes must be exercised"
+	);
 }
 
 #[test]
@@ -208,7 +249,8 @@ fn the_corpus_states_every_condition_and_one_catch_all() {
 	// The migration's claim, in the only place it can be checked: the lane
 	// conditions are data. Every lane but one states a predicate, the one that
 	// does not is the fallback, and each condition reads fields the observation
-	// names - so a typo fails at load rather than selecting a lane nobody meant.
+	// names - so a typo fails at load rather than selecting a lane nobody
+	// meant.
 	let Corpus = Corpus();
 	let mut Catch:Vec<String> = Vec::new();
 	for Lane in Corpus.Lanes() {
@@ -232,8 +274,8 @@ fn the_corpus_states_every_condition_and_one_catch_all() {
 	// comment beside one.
 	for Case in Cases() {
 		let Reading = Reading(&Case);
-		let Lane = SelectLane(&Corpus, &Context::from(&Reading))
-			.unwrap_or_else(|Why| panic!("case '{}': {Why}", Case.Name));
+		let Lane =
+			SelectLane(&Corpus, &Context::from(&Reading)).unwrap_or_else(|Why| panic!("case '{}': {Why}", Case.Name));
 		assert_eq!(
 			Lane.Name, Case.Lane,
 			"case '{}' selects '{}' from the corpus's own condition, and the case expects '{}'",
@@ -244,14 +286,14 @@ fn the_corpus_states_every_condition_and_one_catch_all() {
 
 #[test]
 fn the_conditions_agree_with_the_priority_they_replaced_on_every_reachable_reading() {
-	// The migration's promise is not "the five cases still work" but "no reading
-	// selects a different lane". This walks the cross-product of the fields the
-	// conditions read - every verdict, both race flags, a turn either side of the
-	// threshold, a gap on either side of the 60 m one, and each of them absent -
-	// and compares the corpus's answer with the rule list this crate carried
-	// before the conditions moved into the file. The rule list is the oracle, and
-	// it is the old code path with the old rules rather than a second translation
-	// of them.
+	// The migration's promise is not "the five cases still work" but "no
+	// reading selects a different lane". This walks the cross-product of
+	// the fields the conditions read - every verdict, both race flags, a
+	// turn either side of the threshold, a gap on either side of the 60 m
+	// one, and each of them absent - and compares the corpus's answer with
+	// the rule list this crate carried before the conditions moved into the
+	// file. The rule list is the oracle, and it is the old code path with
+	// the old rules rather than a second translation of them.
 	let Corpus = Corpus();
 	let mut Compared = 0u32;
 	for Verdict in [None, Some("moving"), Some("creeping"), Some("blocked"), Some("stalled")] {
@@ -279,7 +321,8 @@ fn the_conditions_agree_with_the_priority_they_replaced_on_every_reachable_readi
 							.expect("the corpus names a lane for every reading");
 						let Before = Before(&Corpus, &Reading);
 						assert_eq!(
-							Chosen.Lane.Name, Before,
+							Chosen.Lane.Name,
+							Before,
 							"the corpus selects '{}' where the priority selected '{Before}' for {}",
 							Chosen.Lane.Name,
 							Reading.Body()
@@ -326,8 +369,8 @@ fn Before(Corpus:&AgenticLane::Corpus, Reading:&Reading) -> String {
 #[test]
 fn recover_outranks_a_race_because_a_jammed_car_is_not_racing() {
 	// The one ordering that is a judgement rather than an enumeration: the old
-	// `Mode::Of` put recovery first for this reason, and a rewire that let a race
-	// flag win would drive into the wall at speed.
+	// `Mode::Of` put recovery first for this reason, and a rewire that let a
+	// race flag win would drive into the wall at speed.
 	let Corpus = Corpus();
 	let Car = Car { Address:1, Kmh:0.0, Gear:1, RaceType:1, CareerRace:3, ..Car::default() };
 	let Reading = Observe(&Car, &Scene("blocked", 0.0, None), Some(0.5));
@@ -345,12 +388,18 @@ fn the_drive_lane_asks_the_cruise_question_when_no_cue_is_on_screen() {
 	let With = Observe(&Car, &Scene, Some(0.4));
 	let Without = Observe(&Car, &Scene, None);
 	assert_eq!(
-		Select(&Corpus, &With, &Rules::default(), &TemplateRules()).expect("a lane holds").Template.Name,
+		Select(&Corpus, &With, &Rules::default(), &TemplateRules())
+			.expect("a lane holds")
+			.Template
+			.Name,
 		"freeroam.track_cue",
 		"a cue on screen is the route question"
 	);
 	assert_eq!(
-		Select(&Corpus, &Without, &Rules::default(), &TemplateRules()).expect("a lane holds").Template.Name,
+		Select(&Corpus, &Without, &Rules::default(), &TemplateRules())
+			.expect("a lane holds")
+			.Template
+			.Name,
 		"freeroam.cruise",
 		"no cue is the cruise question"
 	);
@@ -358,12 +407,23 @@ fn the_drive_lane_asks_the_cruise_question_when_no_cue_is_on_screen() {
 
 #[test]
 fn every_field_a_lane_sends_is_measured_or_named_as_unread() {
-	// The guard against a corpus that grows a field this crate silently sends as
-	// `null`: a lane's `why` says what the field is evidence of, and a field
-	// nobody measured is evidence of nothing.
+	// The guard against a corpus that grows a field this crate silently sends
+	// as `null`: a lane's `why` says what the field is evidence of, and a
+	// field nobody measured is evidence of nothing.
 	let Corpus = Corpus();
 	let Reading = Observe(
-		&Car { Address:1, Kmh:63.0, Gear:4, Heading:45.0, RaceType:1, Track:4701, CareerRace:3, Flow:6, Position:[1.0, 2.0, 3.0], ..Car::default() },
+		&Car {
+			Address:1,
+			Kmh:63.0,
+			Gear:4,
+			Heading:45.0,
+			RaceType:1,
+			Track:4701,
+			CareerRace:3,
+			Flow:6,
+			Position:[1.0, 2.0, 3.0],
+			..Car::default()
+		},
 		&Scene("blocked", 26.0, Some(34.0)),
 		Some(0.47),
 	);
@@ -385,9 +445,9 @@ fn every_field_a_lane_sends_is_measured_or_named_as_unread() {
 
 /// A reply the endpoint would answer, kept as the bytes a poster returns.
 ///
-/// The two questions the drive lane asks: a choice with a distribution over every
-/// option, and a score with no legend of its own - the request fills that in, which
-/// is the other half of the round trip a canned body proves.
+/// The two questions the drive lane asks: a choice with a distribution over
+/// every option, and a score with no legend of its own - the request fills that
+/// in, which is the other half of the round trip a canned body proves.
 const REPLY:&str = r#"{
 	"success": true,
 	"result": {
@@ -434,7 +494,8 @@ impl Poster for Capture {
 	}
 }
 
-/// A decider over the real corpus, wired to a poster that answers from a string.
+/// A decider over the real corpus, wired to a poster that answers from a
+/// string.
 fn Decider() -> (Decider, Arc<Capture>) {
 	let Poster = Capture::New(REPLY);
 	let Decider = Create(
@@ -457,10 +518,17 @@ async fn the_posted_body_is_the_lane_and_the_question_and_nothing_else() {
 	let Case = Cases().into_iter().find(|Case| Case.Lane == "drive").expect("the drive case");
 	let Reading = Reading(&Case);
 	let Selection = Decider.Select(&Reading).expect("the drive case selects a lane");
-	let Answer = Decider.Decide(&Selection, &Reading, Bound()).await.expect("the fake poster answers");
+	let Answer = Decider
+		.Decide(&Selection, &Reading, Bound())
+		.await
+		.expect("the fake poster answers");
 
 	// The typed answer, read the way the driver reads it.
-	assert_eq!(Answer.Choice("action"), Some(("steer_left", 0.72)), "the chosen option and its own share");
+	assert_eq!(
+		Answer.Choice("action"),
+		Some(("steer_left", 0.72)),
+		"the chosen option and its own share"
+	);
 	assert_eq!(Answer.Score("urgency"), Some(2.0));
 	assert_eq!(
 		Answer.Position("urgency"),
@@ -476,8 +544,17 @@ async fn the_posted_body_is_the_lane_and_the_question_and_nothing_else() {
 	);
 
 	let Body:Value = serde_json::from_str(&Text).expect("the posted body is JSON");
-	let Keys:Vec<&str> = Body.as_object().expect("the body is an object").keys().map(String::as_str).collect();
-	assert_eq!(Keys, ["model", "questions", "state"], "a decision request is three keys · {Body}");
+	let Keys:Vec<&str> = Body
+		.as_object()
+		.expect("the body is an object")
+		.keys()
+		.map(String::as_str)
+		.collect();
+	assert_eq!(
+		Keys,
+		["model", "questions", "state"],
+		"a decision request is three keys · {Body}"
+	);
 	assert_eq!(Body["model"], json!("clef-flash"), "the body names the bare model");
 	for Chat in ["messages", "temperature", "max_tokens", "stream", "choices"] {
 		assert!(Body.get(Chat).is_none(), "`{Chat}` is a chat-completions field · {Body}");
@@ -487,7 +564,12 @@ async fn the_posted_body_is_the_lane_and_the_question_and_nothing_else() {
 	// lane is a request shape, and this is where that shows.
 	let mut Wanted:Vec<String> = Selection.Lane.Fields.clone();
 	Wanted.sort();
-	let Sent:Vec<&str> = Body["state"].as_object().expect("the state is an object").keys().map(String::as_str).collect();
+	let Sent:Vec<&str> = Body["state"]
+		.as_object()
+		.expect("the state is an object")
+		.keys()
+		.map(String::as_str)
+		.collect();
 	assert_eq!(Sent, Wanted, "the state is the lane's fields, sorted by the map · {Body}");
 	assert!(
 		Body["state"].get("rpm").is_none(),
@@ -520,7 +602,10 @@ impl Scripted {
 		);
 		Questions.insert(
 			"confidence".to_string(),
-			Answered::Score { Score:3.0, Legend:vec!["guessing".into(), "unsure".into(), "fairly sure".into(), "certain".into()] },
+			Answered::Score {
+				Score:3.0,
+				Legend:vec!["guessing".into(), "unsure".into(), "fairly sure".into(), "certain".into()],
+			},
 		);
 		Self {
 			Reply:Ok(Answer { Model:"clef-flash".to_string(), Questions, Usage:Usage::default() }),
@@ -563,7 +648,10 @@ async fn an_answer_is_read_into_the_four_values_the_gate_takes() {
 	let Port = Scripted::Answering();
 	let Consulted = Consult(&Port, &Reading(&Cases()[0]), Bound()).await;
 	assert_eq!(Consulted.Lane, "recover", "the lane the selection named");
-	assert_eq!(Consulted.Asked, "recover / recovery.blocked", "the question the answer was an answer to");
+	assert_eq!(
+		Consulted.Asked, "recover / recovery.blocked",
+		"the question the answer was an answer to"
+	);
 	let Advice = Consulted.Advice.expect("the answer carried an action");
 	assert_eq!(Advice.Model, "clef-flash");
 	assert_eq!(Advice.Word, "reverse_right");
@@ -577,10 +665,10 @@ async fn an_answer_is_read_into_the_four_values_the_gate_takes() {
 
 #[tokio::test]
 async fn a_failed_consultation_keeps_the_lane_and_says_why() {
-	// The claim the driver's resilience rests on: the rules already decided this
-	// tick, so a refusal costs an opinion and not a car - but the lane it chose
-	// and the word for the refusal both survive, because "recover timed out" and
-	// "no lane held" are different facts.
+	// The claim the driver's resilience rests on: the rules already decided
+	// this tick, so a refusal costs an opinion and not a car - but the lane
+	// it chose and the word for the refusal both survive, because "recover
+	// timed out" and "no lane held" are different facts.
 	let Port = Scripted::Failing();
 	let Consulted = Consult(&Port, &Reading(&Cases()[0]), Bound()).await;
 	assert_eq!(Consulted.Lane, "recover");
@@ -616,7 +704,9 @@ impl Recorder {
 
 	/// The last call the adapter made, for a test driving one case at a time.
 	fn Last(&self) -> (String, String, String) {
-		self.Sent().pop().expect("the adapter posted nothing, so there is no request to assert")
+		self.Sent()
+			.pop()
+			.expect("the adapter posted nothing, so there is no request to assert")
 	}
 }
 
@@ -624,25 +714,26 @@ impl Recorder {
 /// recording transport instead of curl.
 ///
 /// The credentials are arguments because their absence is a case worth testing:
-/// an adapter built without them must refuse *before* it reaches what would have
-/// been a socket, which is the structural half of the no-network claim.
+/// an adapter built without them must refuse *before* it reaches what would
+/// have been a socket, which is the structural half of the no-network claim.
 fn Over(Account:Option<&str>, Token:Option<&str>, Reply:&str) -> (Decider, Arc<Recorder>) {
 	let Recorder = Recorder::New(Reply);
 	let Kept = Recorder.clone();
-	let Http = Http::Over(
+	let HTTP = HTTP::Over(
 		Account.map(str::to_string),
 		Token.map(str::to_string),
 		Arc::new(move |Url:&str, Body:&str, Token:&str| {
-			Kept.Sent
-				.lock()
-				.unwrap_or_else(|Poison| Poison.into_inner())
-				.push((Url.to_string(), Body.to_string(), Token.to_string()));
+			Kept.Sent.lock().unwrap_or_else(|Poison| Poison.into_inner()).push((
+				Url.to_string(),
+				Body.to_string(),
+				Token.to_string(),
+			));
 			Ok(Kept.Reply.clone())
 		}),
 	);
 	let Decider = Create(
 		Corpus(),
-		Arc::new(Http),
+		Arc::new(HTTP),
 		Options {
 			Model:"clef-flash".to_string(),
 			Lanes:Rules::default(),
@@ -664,8 +755,14 @@ async fn the_adapter_posts_each_of_the_five_lanes_to_the_decision_route() {
 	let mut Seen:BTreeSet<String> = BTreeSet::new();
 	for Case in Cases() {
 		let Reading = Reading(&Case);
-		let Selection = Decider.Select(&Reading).unwrap_or_else(|Why| panic!("case '{}': {Why}", Case.Name));
-		assert_eq!(Selection.Lane.Name, Case.Lane, "case '{}' selected lane '{}'", Case.Name, Selection.Lane.Name);
+		let Selection = Decider
+			.Select(&Reading)
+			.unwrap_or_else(|Why| panic!("case '{}': {Why}", Case.Name));
+		assert_eq!(
+			Selection.Lane.Name, Case.Lane,
+			"case '{}' selected lane '{}'",
+			Case.Name, Selection.Lane.Name
+		);
 		assert_eq!(
 			Selection.Template.Name, Case.Template,
 			"case '{}' selected template '{}'",
@@ -688,8 +785,8 @@ async fn the_adapter_posts_each_of_the_five_lanes_to_the_decision_route() {
 		let (Url, Body, Token) = Recorder.Last();
 		// What the crate asked for, composed by the crate itself: the adapter's
 		// job is to put *these* bytes at *this* address, and asserting against
-		// the composition rather than a literal is what makes that a claim about
-		// forwarding instead of a claim about spelling.
+		// the composition rather than a literal is what makes that a claim
+		// about forwarding instead of a claim about spelling.
 		let Composed = Compose(&Selection, &Reading).expect("the selection composes");
 		println!(
 			"case {:<18} -> {:<8} {:<20} {Url} · {} bytes",
@@ -698,9 +795,23 @@ async fn the_adapter_posts_each_of_the_five_lanes_to_the_decision_route() {
 			Selection.Template.Name,
 			Body.len()
 		);
-		assert_eq!(Url, Endpoint("account-id", &Composed.Path()), "case '{}': the URL the adapter built", Case.Name);
-		assert_eq!(Body, Composed.Text(), "case '{}': the adapter forwards the crate's own bytes", Case.Name);
-		assert_eq!(Token, "a-token", "case '{}': the credential the adapter was built with", Case.Name);
+		assert_eq!(
+			Url,
+			Endpoint("account-id", &Composed.Path()),
+			"case '{}': the URL the adapter built",
+			Case.Name
+		);
+		assert_eq!(
+			Body,
+			Composed.Text(),
+			"case '{}': the adapter forwards the crate's own bytes",
+			Case.Name
+		);
+		assert_eq!(
+			Token, "a-token",
+			"case '{}': the credential the adapter was built with",
+			Case.Name
+		);
 
 		// The route itself, pinned once per case rather than derived, so a
 		// change to the crate's route and a change to this crate's use of it
@@ -711,24 +822,52 @@ async fn the_adapter_posts_each_of_the_five_lanes_to_the_decision_route() {
 			Case.Name
 		);
 
-		// The body's shape, as the endpoint reads it: three keys, the bare model
-		// name, and the lane's fields and no others. The enumeration of chat
-		// fields that must not appear is `the_posted_body_is_the_lane_and_the_question_and_nothing_else`'s
+		// The body's shape, as the endpoint reads it: three keys, the bare
+		// model name, and the lane's fields and no others. The
+		// enumeration of chat fields that must not appear is
+		// `the_posted_body_is_the_lane_and_the_question_and_nothing_else`'s
 		// claim; here the key set is asserted whole, which excludes them by
 		// construction.
 		let Json:Value = serde_json::from_str(&Body).expect("the posted body is JSON");
-		let Keys:Vec<&str> = Json.as_object().expect("the body is an object").keys().map(String::as_str).collect();
-		assert_eq!(Keys, ["model", "questions", "state"], "case '{}': a decision request is three keys · {Json}", Case.Name);
-		assert_eq!(Json["model"], json!("clef-flash"), "case '{}': the body names the bare model", Case.Name);
+		let Keys:Vec<&str> = Json
+			.as_object()
+			.expect("the body is an object")
+			.keys()
+			.map(String::as_str)
+			.collect();
+		assert_eq!(
+			Keys,
+			["model", "questions", "state"],
+			"case '{}': a decision request is three keys · {Json}",
+			Case.Name
+		);
+		assert_eq!(
+			Json["model"],
+			json!("clef-flash"),
+			"case '{}': the body names the bare model",
+			Case.Name
+		);
 		let mut Wanted:Vec<String> = Selection.Lane.Fields.clone();
 		Wanted.sort();
-		let Sent:Vec<&str> = Json["state"].as_object().expect("the state is an object").keys().map(String::as_str).collect();
-		assert_eq!(Sent, Wanted, "case '{}': the state is the lane's fields and nothing else · {Json}", Case.Name);
+		let Sent:Vec<&str> = Json["state"]
+			.as_object()
+			.expect("the state is an object")
+			.keys()
+			.map(String::as_str)
+			.collect();
+		assert_eq!(
+			Sent, Wanted,
+			"case '{}': the state is the lane's fields and nothing else · {Json}",
+			Case.Name
+		);
 
 		Seen.insert(Selection.Lane.Name.clone());
 	}
 	let Wanted:BTreeSet<String> = LANES.iter().map(|(Name, _)| Name.to_string()).collect();
-	assert_eq!(Seen, Wanted, "the cases went through the adapter as {Seen:?}, and all five lanes must be exercised");
+	assert_eq!(
+		Seen, Wanted,
+		"the cases went through the adapter as {Seen:?}, and all five lanes must be exercised"
+	);
 }
 
 #[tokio::test]
@@ -745,8 +884,16 @@ async fn a_run_without_credentials_never_reaches_the_transport() {
 		.Decide(&Selection, &Reading, Bound())
 		.await
 		.expect_err("a run with no account id is refused, not answered");
-	assert_eq!(Why.Why(), "post-failed: no account id", "the word a trace prints is the one it printed before the move");
-	assert!(Recorder.Sent().is_empty(), "the transport was reached without a credential: {:?}", Recorder.Sent());
+	assert_eq!(
+		Why.Why(),
+		"post-failed: no account id",
+		"the word a trace prints is the one it printed before the move"
+	);
+	assert!(
+		Recorder.Sent().is_empty(),
+		"the transport was reached without a credential: {:?}",
+		Recorder.Sent()
+	);
 }
 
 #[tokio::test]
@@ -754,7 +901,7 @@ async fn the_adapter_reports_a_transport_failure_as_the_lane_it_was_asking() {
 	// The other half of a bounded call: a transport that answers a word instead
 	// of a body is a `post-failed` carrying the path that was asked, and it is
 	// the lane's own path - so a trace can say which question went unanswered.
-	let Refusing:Http = Http::Over(
+	let Refusing:HTTP = HTTP::Over(
 		Some("account-id".to_string()),
 		Some("a-token".to_string()),
 		Arc::new(|_Url:&str, _Body:&str, _Token:&str| Err("http 401".to_string())),
@@ -762,12 +909,20 @@ async fn the_adapter_reports_a_transport_failure_as_the_lane_it_was_asking() {
 	let Decider = Create(
 		Corpus(),
 		Arc::new(Refusing),
-		Options { Model:"clef-flash".to_string(), Lanes:Rules::default(), Templates:TemplateRules(), Budget:Budget::New(0, 0) },
+		Options {
+			Model:"clef-flash".to_string(),
+			Lanes:Rules::default(),
+			Templates:TemplateRules(),
+			Budget:Budget::New(0, 0),
+		},
 	);
 	let Case = Cases().into_iter().find(|Case| Case.Lane == "corner").expect("the corner case");
 	let Reading = Reading(&Case);
 	let Selection = Decider.Select(&Reading).expect("the corner case selects a lane");
-	let Why = Decider.Decide(&Selection, &Reading, Bound()).await.expect_err("a 401 is not an answer");
+	let Why = Decider
+		.Decide(&Selection, &Reading, Bound())
+		.await
+		.expect_err("a 401 is not an answer");
 	assert_eq!(Why.Why(), "post-failed: http 401", "the transport's word is the sentence");
 	assert_eq!(
 		Why.Detail(),
@@ -775,4 +930,3 @@ async fn the_adapter_reports_a_transport_failure_as_the_lane_it_was_asking() {
 		"the detail is the path that was asked, so a trace names the question"
 	);
 }
-

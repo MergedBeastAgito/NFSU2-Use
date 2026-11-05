@@ -18,25 +18,24 @@
 //! `lead_closing_kmh` when the traffic list has a car worth answering about.
 //!
 //! Three of the observation's fields are declared and **not** read yet:
-//! `yaw_rate`, `velocity`, and the wheel arrays (`surface`, `grounded`, `slip`),
-//! plus the two frame scalars `route_cue_pixels` and `road_band_motion`. They
-//! travel as `null`. That is a fact about the ingestion, not about the model,
-//! and writing a plausible number for them would be the one thing this file must
-//! never do: a lane's `why` says what the field is evidence of, and a fabricated
-//! reading is evidence of nothing.
+//! `yaw_rate`, `velocity`, and the wheel arrays (`surface`, `grounded`,
+//! `slip`), plus the two frame scalars `route_cue_pixels` and
+//! `road_band_motion`. They travel as `null`. That is a fact about the
+//! ingestion, not about the model, and writing a plausible number for them
+//! would be the one thing this file must never do: a lane's `why` says what the
+//! field is evidence of, and a fabricated reading is evidence of nothing.
 //!
 //! # `lead_m` is this crate's word, not the observation's
 //!
 //! The observation declares `traffic` as an array of cars with their distance,
 //! lane offset, speed and closing rate; the corpus's questions refer to the
-//! nearest one as `lead_m`. The rules need that nearest distance as a number, and
-//! a predicate cannot count an array, so the scalar is set here beside the array
-//! the page already returns. It is set only when a lead exists, so
+//! nearest one as `lead_m`. The rules need that nearest distance as a number,
+//! and a predicate cannot count an array, so the scalar is set here beside the
+//! array the page already returns. It is set only when a lead exists, so
 //! `lead_m` being absent is the same statement as "the road ahead is clear".
 
-use serde_json::json;
-
 use AgenticLane::State as Reading;
+use serde_json::json;
 
 use crate::Struct::{Situation::Situation, State::Car};
 

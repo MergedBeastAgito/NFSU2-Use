@@ -9,9 +9,10 @@
 //! # Three things the port requires, and where each is honoured
 //!
 //! - **The body is the endpoint's own bytes.** [`crate::Fn::Cloudflare::Post`]
-//!   returns curl's stdout minus the status line, unmodified. Nothing here reads
-//!   `result` or unwraps `answers`; that is `Fn::Parse`'s single statement of the
-//!   reply's shape, and a second reading here would be a second parser.
+//!   returns curl's stdout minus the status line, unmodified. Nothing here
+//!   reads `result` or unwraps `answers`; that is `Fn::Parse`'s single
+//!   statement of the reply's shape, and a second reading here would be a
+//!   second parser.
 //! - **The call is bounded.** curl has its own `--max-time`, and the caller's
 //!   deadline is applied around the blocking call as well - whichever comes
 //!   first, the tick gets an answer or a word. A poster that awaited curl
@@ -22,12 +23,12 @@
 //!
 //! # Why the credentials are read once, and may be absent
 //!
-//! [`Http::New`] reads the account id and the token when the run is composed.
+//! [`HTTP::New`] reads the account id and the token when the run is composed.
 //! Both may be missing, and that is not a construction failure: the words a
-//! missing credential produces are `"no account id"` and `"no token"`, which the
-//! round trip reports as a `post-failed` on the tick that needed them - so a run
-//! without credentials is a rules-only run with a trace that says why, rather
-//! than a process that refused to start.
+//! missing credential produces are `"no account id"` and `"no token"`, which
+//! the round trip reports as a `post-failed` on the tick that needed them - so
+//! a run without credentials is a rules-only run with a trace that says why,
+//! rather than a process that refused to start.
 //!
 //! # Blocking, off the async thread
 //!
@@ -39,8 +40,8 @@
 //!
 //! # The transport is a value, so the adapter is testable
 //!
-//! [`Http::New`] is the production value: the environment's credentials and
-//! `Fn::Cloudflare::Post` as the thing that sends. [`Http::Over`] is the same
+//! [`HTTP::New`] is the production value: the environment's credentials and
+//! `Fn::Cloudflare::Post` as the thing that sends. [`HTTP::Over`] is the same
 //! adapter over credentials and a transport the caller supplies, which is what
 //! lets a test drive *this* code - the path, the body, the deadline race, the
 //! recorded round trip - and answer from a string instead of a socket. Without
@@ -54,7 +55,7 @@ use std::{
 };
 
 use AgenticLane::{Failure, Poster, Request};
-use AgenticSdk::{Call, FutureBox};
+use AgenticSDK::{Call, FutureBox};
 
 use crate::Fn::Cloudflare::{Account, Endpoint, Post, Token};
 
@@ -62,7 +63,7 @@ use crate::Fn::Cloudflare::{Account, Endpoint, Post, Token};
 /// reply body or a word saying why there is none.
 ///
 /// A function rather than a trait because it has one method and no state of its
-/// own: the credentials are read once by [`Http`], and everything else a
+/// own: the credentials are read once by [`HTTP`], and everything else a
 /// transport needs it is handed. The words it fails with are the transport's
 /// own (`"timeout"`, `"curl unavailable"`, `"http 401"`), which the port maps
 /// onto `post-failed` with the path as the detail.
@@ -88,7 +89,7 @@ pub struct Wire {
 
 /// The last round trip this process made.
 ///
-/// A slot rather than a field on [`Http`], because the value that reads it -
+/// A slot rather than a field on [`HTTP`], because the value that reads it -
 /// the adapter painting the overlay - is handed the decider as a trait object
 /// and never sees the transport. One process drives one car, so one slot is the
 /// whole of the state a run has; a test that drives the tick with its own
@@ -119,17 +120,18 @@ fn Keep(One:Wire) { *Lock(Slot()) = Some(One); }
 /// The two fields are the whole of what a call needs and cannot read per tick:
 /// who is being asked and with what. They are read once so that a run's
 /// credentials are one fact, not one environment lookup per request.
-pub struct Http {
+pub struct HTTP {
 	/// The Cloudflare account id, when the environment carries one.
 	Account:Option<String>,
-	/// The API token, when the environment or the named dotenv file carries one.
+	/// The API token, when the environment or the named dotenv file carries
+	/// one.
 	Token:Option<String>,
 	/// What actually sends the request. Production supplies
 	/// [`crate::Fn::Cloudflare::Post`]; a test supplies a recorder.
 	Transport:Transport,
 }
 
-impl Http {
+impl HTTP {
 	/// The transport the environment describes.
 	pub fn New() -> Self {
 		let Sending:Transport = Arc::new(Post);
@@ -143,7 +145,7 @@ impl Http {
 	/// its own [`Transport`] and get the whole of the adapter - the URL built
 	/// from [`Endpoint`], the body forwarded byte for byte, the deadline and
 	/// cancellation raced around the wait, the round trip recorded - with the
-	/// answer coming from wherever it likes. [`Http::New`] is this constructor
+	/// answer coming from wherever it likes. [`HTTP::New`] is this constructor
 	/// with curl.
 	pub fn Over(Account:Option<String>, Token:Option<String>, Transport:Transport) -> Self {
 		Self { Account, Token, Transport }
@@ -156,16 +158,17 @@ impl Http {
 	pub fn Ready(&self) -> bool { self.Account.is_some() && self.Token.is_some() }
 }
 
-impl Default for Http {
+impl Default for HTTP {
 	fn default() -> Self { Self::New() }
 }
 
-impl Poster for Http {
+impl Poster for HTTP {
 	fn Post<'a>(&'a self, Request:&'a Request, Bounded:Call) -> FutureBox<'a, Result<String, Failure>> {
 		Box::pin(async move {
 			// The round trip refuses a cancelled call before it gets here; this
-			// is the second reading of the same fact, because a poster is a port
-			// implementation and a caller may reach it directly.
+			// is the second reading of the same fact, because a poster is a
+			// port implementation and a caller may reach it
+			// directly.
 			if Bounded.Cancelled() {
 				return Err(Failure::Of("cancelled").With("the caller cancelled before the request was posted"));
 			}
@@ -174,12 +177,18 @@ impl Poster for Http {
 				// recorded even though nothing was posted: the panel shows
 				// what would have been sent beside the word for why it was
 				// not, which is the diagnosis a missing credential needs.
-				Keep(Wire { Send:Request.Text(), Recv:String::new(), Error:Some("no account id".into()), Ms:0 });
+				Keep(Wire {
+					Send:Request.Text(),
+					Recv:String::new(),
+					Error:Some("no account id".into()),
+					Ms:0,
+				});
 				return Err(Failure::Of("no account id").With("CLOUDFLARE_ACCOUNT_ID is unset"));
 			};
 			let Some(Token) = self.Token.as_deref() else {
 				Keep(Wire { Send:Request.Text(), Recv:String::new(), Error:Some("no token".into()), Ms:0 });
-				return Err(Failure::Of("no token").With("CLOUDFLARE_API_TOKEN is unset and CLOUDFLARE_ENV_FILE names no token"));
+				return Err(Failure::Of("no token")
+					.With("CLOUDFLARE_API_TOKEN is unset and CLOUDFLARE_ENV_FILE names no token"));
 			};
 
 			let Path = Request.Path();
@@ -203,9 +212,10 @@ impl Poster for Http {
 			let Answer = match tokio::runtime::Handle::try_current() {
 				Ok(_) => {
 					let Joined = tokio::task::spawn_blocking(Work);
-					// The caller's deadline, as an interval on the same clock the
-					// caller measured it with. A deadline that has already passed
-					// is a zero-length wait, which is the honest reading of it.
+					// The caller's deadline, as an interval on the same clock
+					// the caller measured it with. A
+					// deadline that has already passed is a
+					// zero-length wait, which is the honest reading of it.
 					let Left = Bounded.Deadline.saturating_duration_since(Instant::now());
 					tokio::select! {
 						Done = Joined => Done.map_err(|Why| format!("curl unavailable: {Why}")).and_then(|Answer| Answer),

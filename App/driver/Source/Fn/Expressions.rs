@@ -14,7 +14,7 @@
 // this crate names one package: the facade's exclusion list keeps the helpers
 // (`FillDeclared`, `AssertParameters`) out, but `script!` is the consumer's own
 // entry point to the script convention and travels with it.
-use AgenticSdk::script;
+use AgenticSDK::script;
 
 /// Install the page-side driver: the memory reader and the key holder.
 pub fn Bootstrap() -> &'static str { script!("Expressions/Bootstrap") }

@@ -3,6 +3,12 @@
 **/*.rlib
 **/*.working
 
+# A lock file is machine state, not repository content: it is generated here and
+# by any CI job that needs one, and it is never committed - in this repository or
+# any other. This line is what makes that true for a clone that has no global
+# ignore of its own, and it is why no workflow step passes `--locked`.
+Cargo.lock
+
 # Local run artefacts: frames, traces and probe output from this machine.
 # Named one by one rather than with *.json, because that also swallowed
 # Schema/*.json - which is the repository's data, not this machine's.

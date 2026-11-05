@@ -3,11 +3,11 @@
 //! Every rule here is a statement about the car, so it can be read, argued with
 //! and tested without a game running. The browser is the caller's problem.
 //!
-//! The rules read the scene, not the dashboard. That is the one change this file
-//! needed and the reason it is worth reading: a car pressed against a wall
-//! reports its wheel speed, so `km/h` alone cannot tell a car doing forty from a
-//! car doing nothing at all. [`Situation`] can, because it compares where the car
-//! is with where it was.
+//! The rules read the scene, not the dashboard. That is the one change this
+//! file needed and the reason it is worth reading: a car pressed against a wall
+//! reports its wheel speed, so `km/h` alone cannot tell a car doing forty from
+//! a car doing nothing at all. [`Situation`] can, because it compares where the
+//! car is with where it was.
 
 use crate::Struct::{
 	Decision::{Action, Decision},
@@ -81,12 +81,7 @@ pub fn Decide(Car:&Car, Scene:&Situation, Cue:Option<f64>, TargetKmh:f64, Carry:
 				_ => Action::SteerLeft,
 			});
 		}
-		return Decision::Rule(
-			Held,
-			false,
-			0.8,
-			format!("backing out · {:.0} km/h · {}", Car.Kmh, Scene.Word),
-		);
+		return Decision::Rule(Held, false, 0.8, format!("backing out · {:.0} km/h · {}", Car.Kmh, Scene.Word));
 	}
 
 	// Turning away, at the target pace: the escape is a reverse *and* a turn,
@@ -145,6 +140,4 @@ pub fn Decide(Car:&Car, Scene:&Situation, Cue:Option<f64>, TargetKmh:f64, Carry:
 /// Odd attempts turn left and even ones right, so a car that reverses into the
 /// same wall twice has tried both sides of it. The attempt number is the only
 /// state that needs to survive, and the caller keeps it.
-fn Backing(Attempt:u32) -> Action {
-	if Attempt % 2 == 1 { Action::ReverseLeft } else { Action::ReverseRight }
-}
+fn Backing(Attempt:u32) -> Action { if Attempt % 2 == 1 { Action::ReverseLeft } else { Action::ReverseRight } }

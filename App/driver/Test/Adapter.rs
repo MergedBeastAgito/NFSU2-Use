@@ -20,11 +20,9 @@ use std::{
 	time::Duration,
 };
 
+use AgenticLane::{Answer, Answered, Budget, DecidePort, Error as LaneError, Selection, State as LaneState, Usage};
 use AgenticNfsuDriver::{Driver, Policy, State};
-use AgenticLane::{
-	Answer, Answered, Budget, DecidePort, Error as LaneError, Selection, State as LaneState, Usage,
-};
-use AgenticSdk::{
+use AgenticSDK::{
 	Adapter,
 	Browse,
 	Call,
@@ -136,7 +134,7 @@ impl Browse for Scripted {
 /// A page handle, fabricated: the adapter never opens one.
 fn Handle() -> Target {
 	Target {
-		Url:"https://nfsu2.xyz/".into(),
+		URL:"https://nfsu2.xyz/".into(),
 		Ws:"ws://127.0.0.1:1/devtools/page/0".into(),
 		Ownership:Ownership::Attached,
 	}
@@ -255,10 +253,7 @@ async fn a_reverse_tick_holds_the_reverse_key_and_a_steering_key() {
 		"the throttle is still held: {Tick:?}"
 	);
 	// And the trace says the same thing the keys do.
-	assert!(
-		Tick.last().expect("a publish").contains("reverse left"),
-		"{Tick:?}"
-	);
+	assert!(Tick.last().expect("a publish").contains("reverse left"), "{Tick:?}");
 }
 
 #[tokio::test]
@@ -387,8 +382,8 @@ fn the_policy_round_trips_through_its_own_text() {
 ///
 /// The port is the seam the rewire put in: the adapter holds `Arc<dyn
 /// DecidePort>`, so a value this test writes is the same thing the composition
-/// root hands it - and what the driver does with an answer is observable without
-/// a credential, a corpus file or a network.
+/// root hands it - and what the driver does with an answer is observable
+/// without a credential, a corpus file or a network.
 struct Written {
 	/// The lane and template `Select` reports.
 	Selection:Selection,
@@ -465,7 +460,12 @@ async fn a_tick_asks_the_decider_and_obeys_the_answer_it_gets() {
 	let Held:Arc<dyn Adapter> = Arc::new(Driver::New(
 		Page.clone(),
 		Handle(),
-		Policy { Model:Some("clef-flash".to_string()), Every:1, Threshold:0.5, ..Policy::default() },
+		Policy {
+			Model:Some("clef-flash".to_string()),
+			Every:1,
+			Threshold:0.5,
+			..Policy::default()
+		},
 		Duration::from_secs(1),
 		Arc::new(Tokio),
 		Some(Port),
@@ -482,7 +482,10 @@ async fn a_tick_asks_the_decider_and_obeys_the_answer_it_gets() {
 	assert_eq!(Last["asked"], "recover / recovery.blocked", "{Last}");
 	assert_eq!(Last["modelAdvice"]["model"], "clef-flash", "{Last}");
 	assert_eq!(Last["modelAdvice"]["answers"]["action"]["choice"], "reverse_right", "{Last}");
-	assert_eq!(Last["modelAdvice"]["answers"]["action"]["probabilities"]["reverse_left"], json!(0.1));
+	assert_eq!(
+		Last["modelAdvice"]["answers"]["action"]["probabilities"]["reverse_left"],
+		json!(0.1)
+	);
 
 	// And the answer is what the car is doing: the model picked the right, the
 	// rules would have picked the left, and the gate took the model's side.

@@ -34,7 +34,7 @@ path = "Source/Main.rs"
 # deliberately left out. A consumer that drives a decision model therefore
 # names the crate itself, from a path that sits beside the facade's.
 [dependencies]
-agentic-sdk = { path = "../../../../Agentic/Crate/Sdk" }
+agentic-sdk = { path = "../../../../Agentic/Crate/SDK" }
 agentic-lane = { path = "../../../../Agentic/Crate/Lane" }
 tokio = { version = "1", features = [
 	"rt-multi-thread",

@@ -184,22 +184,32 @@ impl Witness {
 			format!("turning {:.0}° without getting free", self.LastTurned)
 		};
 		match Word {
-			"blocked" => format!(
-				"the throttle is held and the car has advanced only {:.1} m over the last {Window} ticks, {Turn} - it is pressed against something (a wall, a kerb or a pole) and cannot go forward",
-				self.Last
-			),
-			"creeping" => format!(
-				"the wheels report {:.0} km/h but the car has advanced {:.1} m over the last {Window} ticks, {Turn} - it is spinning or scraping along something rather than driving",
-				Car.Kmh, self.Last
-			),
-			"stalled" => format!(
-				"the car has not moved for {} ticks: it is stopped at {:.0} km/h",
-				self.Stalled, Car.Kmh
-			),
-			_ => format!(
-				"moving freely at {:.0} km/h, {:.1} m over the last {Window} ticks",
-				Car.Kmh, self.Last
-			),
+			"blocked" => {
+				format!(
+					"the throttle is held and the car has advanced only {:.1} m over the last {Window} ticks, {Turn} \
+					 - it is pressed against something (a wall, a kerb or a pole) and cannot go forward",
+					self.Last
+				)
+			},
+			"creeping" => {
+				format!(
+					"the wheels report {:.0} km/h but the car has advanced {:.1} m over the last {Window} ticks, \
+					 {Turn} - it is spinning or scraping along something rather than driving",
+					Car.Kmh, self.Last
+				)
+			},
+			"stalled" => {
+				format!(
+					"the car has not moved for {} ticks: it is stopped at {:.0} km/h",
+					self.Stalled, Car.Kmh
+				)
+			},
+			_ => {
+				format!(
+					"moving freely at {:.0} km/h, {:.1} m over the last {Window} ticks",
+					Car.Kmh, self.Last
+				)
+			},
 		}
 	}
 }

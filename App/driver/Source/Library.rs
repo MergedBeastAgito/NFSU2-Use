@@ -35,8 +35,8 @@
 //! # What this crate no longer carries
 //!
 //! The lane and template machinery moved to the Lane crate (`agentic-lane`,
-//! `Crate/Lane`), which owns it for every caller rather than for this game. What
-//! went, and where it lives now:
+//! `Crate/Lane`), which owns it for every caller rather than for this game.
+//! What went, and where it lives now:
 //!
 //! - `Fn::Send` - the composed state, the mode's dimensions, the per-mode
 //!   question and the tick rotation. That is `Fn::Select` + `Fn::Compose` over
@@ -51,8 +51,9 @@
 //! (`Templates/Observation.json`, `Templates/Questions.json` and the five lanes
 //! its `lanes` object declares), the rules ([`Fn::Decide`]), the gate
 //! ([`Fn::Gate`]), the page expressions, the car and scene readings, and the
-//! transport ([`Fn::Cloudflare`]: the token, curl and the status code, which the
-//! Lane crate reaches through its `Poster` seam and never implements itself).
+//! transport ([`Fn::Cloudflare`]: the token, curl and the status code, which
+//! the Lane crate reaches through its `Poster` seam and never implements
+//! itself).
 //!
 //! # What took its place, one file per decision
 //!
@@ -61,21 +62,22 @@
 //! - [`Fn::Observe`] turns one tick into the field names the corpus uses. It
 //!   writes only what was measured; a field the ingestion does not read yet
 //!   travels as `null` rather than as a plausible number.
-//! - [`Fn::Corpus`] opens the corpus that states the lanes, their conditions and
-//!   their templates, and keeps the one preference a predicate cannot state (the
-//!   cruise question when no route arrow was found). It loads once, at startup,
-//!   so a broken corpus is a sentence before the first tick rather than a
-//!   surprise in the tenth.
-//! - [`Fn::Poster::Http`] is the `Poster` the Lane crate never implements: the
-//!   credentials, curl, the status code and the caller's deadline. It is the one
-//!   file in this crate that opens a socket.
+//! - [`Fn::Corpus`] opens the corpus that states the lanes, their conditions
+//!   and their templates, and keeps the one preference a predicate cannot state
+//!   (the cruise question when no route arrow was found). It loads once, at
+//!   startup, so a broken corpus is a sentence before the first tick rather
+//!   than a surprise in the tenth.
+//! - [`Fn::Poster::HTTP`] is the `Poster` the Lane crate never implements: the
+//!   credentials, curl, the status code and the caller's deadline. It is the
+//!   one file in this crate that opens a socket.
 //! - [`Fn::Consult`] selects, asks, and reads the typed answer into the four
-//!   values the gate takes - plus the distribution the overlay paints, which the
-//!   gate deliberately never sees.
+//!   values the gate takes - plus the distribution the overlay paints, which
+//!   the gate deliberately never sees.
 //!
 //! A consultation that ends without an answer is not a failed tick. The rules
-//! decided before the model was asked, so the car keeps driving and the payload's
-//! `modelAdvice` carries the word for why the model is not in the decision.
+//! decided before the model was asked, so the car keeps driving and the
+//! payload's `modelAdvice` carries the word for why the model is not in the
+//! decision.
 
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
@@ -93,7 +95,7 @@ pub use crate::{
 		Expressions::{Bootstrap, Cruise, Hold, Publish, Release, State},
 		Gate::Gate,
 		Observe::Observe,
-		Poster::Http,
+		Poster::HTTP,
 	},
 	Struct::{
 		Decision::{Action, Decision, Keys},

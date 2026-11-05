@@ -3,8 +3,8 @@
 //! This is the half `module.json` has been claiming since it said
 //! `"kind": "adapter"`. The call path was already here - read the car, decide,
 //! hold the keys, publish - but it lived in `Source/Main.rs`, which is a
-//! program and not a value: nothing could hold it, pass it on, or substitute it.
-//! `Driver` is that value, and `impl Adapter for Driver` is what makes it
+//! program and not a value: nothing could hold it, pass it on, or substitute
+//! it. `Driver` is that value, and `impl Adapter for Driver` is what makes it
 //! reachable from outside this crate without naming this crate.
 //!
 //! # What a request is
@@ -37,7 +37,8 @@ use std::{
 	time::Duration,
 };
 
-use AgenticSdk::{
+use AgenticLane::DecidePort;
+use AgenticSDK::{
 	Adapter,
 	Browse,
 	Call,
@@ -48,7 +49,6 @@ use AgenticSdk::{
 	Port::Adapter::Error as AdapterError,
 	Target,
 };
-use AgenticLane::DecidePort;
 use serde_json::{Value, json};
 
 use crate::{
@@ -122,10 +122,10 @@ pub struct Driver {
 	/// The model, as the port that hides it, or `None` for a rules-only run.
 	///
 	/// The port rather than the corpus: selecting a lane, composing the body,
-	/// reading the reply and metering the spend are `agentic.lane.decide`'s, and
-	/// this adapter is a caller of them. Holding the trait object is also what
-	/// lets a test drive the tick from an answer it wrote, with no corpus and no
-	/// socket.
+	/// reading the reply and metering the spend are `agentic.lane.decide`'s,
+	/// and this adapter is a caller of them. Holding the trait object is
+	/// also what lets a test drive the tick from an answer it wrote, with
+	/// no corpus and no socket.
 	Decider:Option<Arc<dyn DecidePort>>,
 	/// The counters the rules carry between ticks.
 	Run:Mutex<Run>,
@@ -138,10 +138,10 @@ pub struct Driver {
 impl Driver {
 	/// An adapter over an open page, with the policy it starts from.
 	///
-	/// The decider is an argument rather than something built here: which corpus
-	/// and which transport are the composition root's decisions, and an adapter
-	/// that loaded its own corpus would be an adapter a test could not drive
-	/// without files on disk.
+	/// The decider is an argument rather than something built here: which
+	/// corpus and which transport are the composition root's decisions, and
+	/// an adapter that loaded its own corpus would be an adapter a test
+	/// could not drive without files on disk.
 	pub fn New(
 		Browser:Arc<dyn Browse>,
 		Page:Target,
@@ -213,10 +213,10 @@ impl Driver {
 			// opinion that arrives halfway through an escape would drive the
 			// car back into the thing it is leaving.
 			let Manoeuvre = Run.Carry.Back > 0 || Run.Carry.Turning > 0;
-			// The tick as the corpus names its fields, built before the guard is
-			// dropped: it reads nothing but the two values above, and building
-			// it here keeps the whole reading in one scope rather than half of
-			// it outside.
+			// The tick as the corpus names its fields, built before the guard
+			// is dropped: it reads nothing but the two values
+			// above, and building it here keeps the whole reading
+			// in one scope rather than half of it outside.
 			let Reading = Observe(&Car, &Scene, Policy.Cue);
 			(Run.Tick, Decision, Scene, Manoeuvre, Reading)
 		};
@@ -246,20 +246,12 @@ impl Driver {
 			// empty: `asked` is `-`, no `wire` is published, and the panel goes
 			// on showing the last exchange it was given.
 			Trip = LastWire();
-			// An answer that carried no `action` question is not a decision: the
-			// gate keeps the rules and the overlay still shows what came back.
+			// An answer that carried no `action` question is not a decision:
+			// the gate keeps the rules and the overlay still shows
+			// what came back.
 			if let Some(Advice) = &Consulted.Advice {
-				Decision = Gate::New(Policy.Threshold).Apply(
-					Decision,
-					&Advice.Model,
-					&Advice.Word,
-					Advice.Probability,
-					Advice.Confidence,
-					&Car,
-					&Scene,
-					Manoeuvre,
-					Policy.TargetKmh,
-				);
+				Decision =
+					Gate::New(Policy.Threshold).Apply(Decision, Advice, &Car, &Scene, Manoeuvre, Policy.TargetKmh);
 			}
 		}
 
@@ -269,10 +261,10 @@ impl Driver {
 		// nothing at all and the next tick would drive it back into the wall.
 		//
 		// It may not *extend* the manoeuvre: a model asked every sixth tick
-		// answers "reverse" every sixth tick, and a counter reset by each answer
-		// never drains - the car reverses into the same corner until the run
-		// ends. An answer during a manoeuvre chooses the side; only the rules
-		// start one.
+		// answers "reverse" every sixth tick, and a counter reset by each
+		// answer never drains - the car reverses into the same corner
+		// until the run ends. An answer during a manoeuvre chooses the
+		// side; only the rules start one.
 		if Decision.Obeyed && Decision.Action.Reversing() {
 			let mut Guard = Lock(&self.Run);
 			Guard.Carry.Held = Some(Decision.Action);
@@ -284,10 +276,11 @@ impl Driver {
 		// What the car will have felt by the next read.
 		Lock(&self.Run).Throttle = Decision.Throttle;
 
-		// A manoeuvre drives keys; everything else is a goal the page applies at
-		// frame rate. That is the split the design rests on: an escape is a
-		// sequence of keys, a cruise is a setpoint - and a setpoint survives a
-		// slow round trip in a way a keypress does not.
+		// A manoeuvre drives keys; everything else is a goal the page applies
+		// at frame rate. That is the split the design rests on: an
+		// escape is a sequence of keys, a cruise is a setpoint - and a
+		// setpoint survives a slow round trip in a way a keypress does
+		// not.
 		if Manoeuvre {
 			self.Evaluate(&Expressions::Cruise(false, 0.0, 0.0), Bounded.clone()).await?;
 			for (Key, On) in Decision.Keys().Pairs() {

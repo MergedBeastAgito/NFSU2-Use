@@ -8,7 +8,18 @@
 #![allow(non_snake_case)]
 
 use AgenticNfsuDriver::{
-	Action, Car, Carry, DecideAction, Decision, Gate, Insist, Lead, Situation, TurnOutTicks, Window,
+	Action,
+	Advice,
+	Car,
+	Carry,
+	DecideAction,
+	Decision,
+	Gate,
+	Insist,
+	Lead,
+	Situation,
+	TurnOutTicks,
+	Window,
 	Witness,
 };
 use serde_json::json;
@@ -32,16 +43,15 @@ fn Gated(
 	Scene:&Situation,
 	Manoeuvre:bool,
 ) -> Decision {
-	Gate::New(0.5).Apply(Rule, MODEL, Word, Probability, Confidence, Car, Scene, Manoeuvre, 45.0)
+	let Advice = Advice { Model:MODEL.to_string(), Word:Word.to_string(), Probability, Confidence };
+	Gate::New(0.5).Apply(Rule, &Advice, Car, Scene, Manoeuvre, 45.0)
 }
 
 /// A car that is not moving: the state the stall rule exists for.
 fn Stuck() -> Car { Car { Address:1, Kmh:0.0, Gear:2, Heading:0.0, ..Car::default() } }
 
 /// A car at a given speed and place, for the window to watch.
-fn At(Kmh:f64, Y:f64) -> Car {
-	Car { Address:1, Kmh, Gear:3, Heading:0.0, Position:[0.0, Y, 0.0], ..Car::default() }
-}
+fn At(Kmh:f64, Y:f64) -> Car { Car { Address:1, Kmh, Gear:3, Heading:0.0, Position:[0.0, Y, 0.0], ..Car::default() } }
 
 /// A car the window has not seen yet: the open road, before any measurement.
 fn Clear() -> Situation { Situation::Unknown() }
@@ -53,7 +63,9 @@ fn Clear() -> Situation { Situation::Unknown() }
 fn Jammed() -> Situation {
 	Situation {
 		Word:"blocked",
-		Sentence:"the throttle is held and the car has advanced only 0.0 m over the last 6 ticks, with its heading unchanged - it is pressed against something".into(),
+		Sentence:"the throttle is held and the car has advanced only 0.0 m over the last 6 ticks, with its heading \
+		          unchanged - it is pressed against something"
+			.into(),
 		Moved:0.0,
 		Turned:0.0,
 		Blocked:Insist,
@@ -341,8 +353,24 @@ fn a_car_ahead_in_our_lane_is_the_lead() {
 	// the question is asked about, so this ordering is the question's premise.
 	let mut Car = Driving();
 	Car.Traffic = vec![
-		Lead { Distance:12.0, Ahead:-9.0, Right:8.0, Kmh:30.0, Closing:0.0, Driver:4, Name:"TRAFFIC".into() },
-		Lead { Distance:40.0, Ahead:39.0, Right:1.0, Kmh:44.0, Closing:2.0, Driver:4, Name:"TRAFFIC".into() },
+		Lead {
+			Distance:12.0,
+			Ahead:-9.0,
+			Right:8.0,
+			Kmh:30.0,
+			Closing:0.0,
+			Driver:4,
+			Name:"TRAFFIC".into(),
+		},
+		Lead {
+			Distance:40.0,
+			Ahead:39.0,
+			Right:1.0,
+			Kmh:44.0,
+			Closing:2.0,
+			Driver:4,
+			Name:"TRAFFIC".into(),
+		},
 	];
 	let Lead = Car.Lead().expect("a lead");
 	assert_eq!(Lead.Distance, 40.0, "the car ahead in lane is the lead");
