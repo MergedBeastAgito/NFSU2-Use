@@ -95,9 +95,11 @@ the reader accepts, what a foreign readiness report checks, and what it cannot.
 - `Port()` answers `agentic.nfsu.drive` - the string `module.json` declares,
   from one constant rather than three literals;
 - `Call(Request, Call)` performs one tick: bootstrap the page on the first call,
-  read the car, decide, ask the model when the policy says to, hold the four
-  keys, publish, and answer the state it read as
-  `{ "tick", "car", "decision" }`;
+  read the car, decide by the rules, ask `agentic.lane.decide` when the policy
+  says to - the lane selected from the corpus, the body composed there, the
+  poster this crate supplies - hold the four keys, publish, and answer the state
+  it read as `{ "tick", "car", "scene", "lane", "asked", "modelAdvice",
+  "decision" }`;
 - `Dispose()` releases the keys and then the page, once, and never fails - a
   held throttle survives the process that set it, so the release is the one step
   that must not be skipped. Its deadline is built when it runs, not when the
@@ -116,6 +118,14 @@ constructed with".
 as `Arc<dyn Adapter>`, and drives one call per tick. It names no expression any
 more, so the five the crate sends live in one place and the loop cannot send a
 sixth.
+
+The model is a port the adapter holds, not code it carries: `Driver::New` takes
+an `Option<Arc<dyn DecidePort>>`, and `Source/Main.rs` builds it from the corpus
+(`Source/Fn/Corpus.rs`: the directory, the five lanes' priority, the run's
+ceiling), the transport (`Source/Fn/Poster.rs`: the `Poster` `agentic-lane`
+never implements) and nothing else. A run without a model - or with a corpus
+that does not load - passes `None` and drives on the rules alone; the startup
+line says which of the two happened.
 
 ## What this crate demonstrates
 

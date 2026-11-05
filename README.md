@@ -142,8 +142,10 @@ clicks:
 
 ## Notes
 
-- The overlays are DOM, never in-game drawing, and only their buttons take
-  pointer events - a click anywhere else reaches the canvas.
+- The overlays are DOM, never in-game drawing. Each panel takes the mouse over
+  its own box and the text in it is selectable, so a reading can be copied; a
+  click outside every panel still reaches the canvas, which is what keeps the
+  game drivable while the panels are up.
 - This page's CSP blocks `<style>` elements outright, so every panel is styled
   through `cssText`; a stylesheet silently does nothing here.
 - Screenshots flash a WebGPU canvas, so frames come from a screencast stream.

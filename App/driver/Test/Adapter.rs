@@ -15,12 +15,15 @@ use std::{
 	sync::{
 		Arc,
 		Mutex,
-		atomic::{AtomicBool, Ordering},
+		atomic::{AtomicBool, AtomicU32, Ordering},
 	},
 	time::Duration,
 };
 
 use AgenticNfsuDriver::{Driver, Policy, State};
+use AgenticLane::{
+	Answer, Answered, Budget, DecidePort, Error as LaneError, Selection, State as LaneState, Usage,
+};
 use AgenticSdk::{
 	Adapter,
 	Browse,
@@ -378,4 +381,127 @@ fn the_policy_round_trips_through_its_own_text() {
 	// gate clamps it, and clamping here would hide which value was asked
 	// for.
 	assert_eq!(Policy::From(r#"{"threshold":1.7}"#).expect("parsed").Threshold, 1.7);
+}
+
+/// A model the driver can ask, with no corpus and no socket.
+///
+/// The port is the seam the rewire put in: the adapter holds `Arc<dyn
+/// DecidePort>`, so a value this test writes is the same thing the composition
+/// root hands it - and what the driver does with an answer is observable without
+/// a credential, a corpus file or a network.
+struct Written {
+	/// The lane and template `Select` reports.
+	Selection:Selection,
+	/// The answer `Decide` returns.
+	Answer:Answer,
+	/// How many times `Decide` was called.
+	Asked:AtomicU32,
+}
+
+impl Written {
+	/// One lane, one answer: the escape, chosen by the model.
+	fn New() -> Self {
+		let mut Questions = std::collections::BTreeMap::new();
+		Questions.insert(
+			"action".to_string(),
+			Answered::Choice {
+				Choice:"reverse_right".to_string(),
+				Probabilities:[("reverse_left".to_string(), 0.1), ("reverse_right".to_string(), 0.9)]
+					.into_iter()
+					.collect(),
+			},
+		);
+		Questions.insert(
+			"confidence".to_string(),
+			Answered::Score {
+				Score:3.0,
+				Legend:vec!["guessing".into(), "unsure".into(), "fairly sure".into(), "certain".into()],
+			},
+		);
+		Self {
+			Selection:Selection {
+				Lane:AgenticLane::Lane { Name:"recover".to_string(), ..Default::default() },
+				Template:AgenticLane::Template { Name:"recovery.blocked".to_string(), ..Default::default() },
+			},
+			Answer:Answer { Model:"clef-flash".to_string(), Questions, Usage:Usage::default() },
+			Asked:AtomicU32::new(0),
+		}
+	}
+}
+
+impl DecidePort for Written {
+	fn Select(&self, _Reading:&LaneState) -> Result<Selection, LaneError> { Ok(self.Selection.clone()) }
+
+	fn Decide<'a>(
+		&'a self,
+		_Selection:&'a Selection,
+		_Reading:&'a LaneState,
+		_Call:Call,
+	) -> FutureBox<'a, Result<Answer, LaneError>> {
+		self.Asked.fetch_add(1, Ordering::SeqCst);
+		let Answer = self.Answer.clone();
+		Box::pin(async move { Ok(Answer) })
+	}
+
+	fn Budget(&self) -> Budget { Budget::New(0, 0) }
+}
+
+#[tokio::test]
+async fn a_tick_asks_the_decider_and_obeys_the_answer_it_gets() {
+	// A car that is not moving: three ticks under 2 km/h is what the witness
+	// calls stalled, and a stalled car is the one whose answer the gate obeys.
+	let Page = Arc::new(Scripted::New());
+	Page.Answer(json!({
+		"car": 1,
+		"pos": [0.0, 0.0, 0.0],
+		"heading": 0.0,
+		"speed": 0.0,
+		"kmh": 0.0,
+		"rpm": 800,
+		"gear": 2
+	}));
+	let Model = Arc::new(Written::New());
+	let Port:Arc<dyn DecidePort> = Model.clone();
+	let Held:Arc<dyn Adapter> = Arc::new(Driver::New(
+		Page.clone(),
+		Handle(),
+		Policy { Model:Some("clef-flash".to_string()), Every:1, Threshold:0.5, ..Policy::default() },
+		Duration::from_secs(1),
+		Arc::new(Tokio),
+		Some(Port),
+	));
+
+	let mut Last = Value::Null;
+	for _ in 0..3 {
+		Last = Held.Call("", Bounded()).await.expect("the tick answered");
+	}
+
+	// The trace says which lane and which question the answer was an answer to,
+	// and the overlay's view carries the whole distribution.
+	assert_eq!(Last["lane"], "recover", "{Last}");
+	assert_eq!(Last["asked"], "recover / recovery.blocked", "{Last}");
+	assert_eq!(Last["modelAdvice"]["model"], "clef-flash", "{Last}");
+	assert_eq!(Last["modelAdvice"]["answers"]["action"]["choice"], "reverse_right", "{Last}");
+	assert_eq!(Last["modelAdvice"]["answers"]["action"]["probabilities"]["reverse_left"], json!(0.1));
+
+	// And the answer is what the car is doing: the model picked the right, the
+	// rules would have picked the left, and the gate took the model's side.
+	assert_eq!(Last["decision"]["action"], "reverse right", "{Last}");
+	assert_eq!(Last["decision"]["advised"], true, "{Last}");
+	assert_eq!(Last["decision"]["probability"], json!(0.9), "{Last}");
+	assert_eq!(Last["decision"]["confidence"], json!(1.0), "{Last}");
+	assert_eq!(Model.Asked.load(Ordering::SeqCst), 3, "`every: 1` asks on every tick");
+}
+
+#[tokio::test]
+async fn a_run_with_no_model_never_asks_and_says_so() {
+	// The rules-only run is the one a missing credential, a spent ceiling or an
+	// unreadable corpus degrades to, so it has to be a shape the trace can show
+	// rather than a silence.
+	let (Held, _) = held(Policy::default());
+	let Answer = Held.Call("", Bounded()).await.expect("the tick answered");
+	assert_eq!(Answer["lane"], "-", "{Answer}");
+	assert_eq!(Answer["asked"], "-", "{Answer}");
+	assert_eq!(Answer["modelAdvice"], Value::Null, "{Answer}");
+	assert_eq!(Answer["decision"]["advised"], false, "{Answer}");
 }

@@ -37,12 +37,61 @@
 //! executor at all - a caller driving the future with `BlockOn` - the call runs
 //! on the only thread there is, because there is nothing to yield to.
 
-use std::time::Instant;
+use std::{
+	sync::{Mutex, MutexGuard, OnceLock},
+	time::Instant,
+};
 
 use AgenticLane::{Failure, Poster, Request};
 use AgenticSdk::{Call, FutureBox};
 
 use crate::Fn::Cloudflare::{Account, Endpoint, Post, Token};
+
+/// One round trip, as it went over the wire.
+///
+/// The body that was composed, the body that came back, why one did not, and
+/// how long it took. It is the transport's own account of the call and nothing
+/// else: no header, no credential, no URL - the page paints it in a panel, and
+/// a panel is the last place a token may appear.
+#[derive(Clone, Debug, Default)]
+pub struct Wire {
+	/// The exact JSON body the endpoint was sent.
+	pub Send:String,
+	/// The exact body it answered, empty when it answered nothing.
+	pub Recv:String,
+	/// Why the call failed, when it did. Never carries a credential.
+	pub Error:Option<String>,
+	/// Round-trip milliseconds, as a whole number.
+	pub Ms:u64,
+}
+
+/// The last round trip this process made.
+///
+/// A slot rather than a field on [`Http`], because the value that reads it -
+/// the adapter painting the overlay - is handed the decider as a trait object
+/// and never sees the transport. One process drives one car, so one slot is the
+/// whole of the state a run has; a test that drives the tick with its own
+/// poster writes the same slot and reads its own body back.
+static RoundTrip:OnceLock<Mutex<Option<Wire>>> = OnceLock::new();
+
+/// Where the last round trip is kept, made on first use.
+fn Slot() -> &'static Mutex<Option<Wire>> { RoundTrip.get_or_init(|| Mutex::new(None)) }
+
+/// The lock, with poisoning treated as the data still being there.
+fn Lock<T>(Guard:&Mutex<T>) -> MutexGuard<'_, T> { Guard.lock().unwrap_or_else(|Poison| Poison.into_inner()) }
+
+/// The last round trip, when this process made one.
+pub fn Last() -> Option<Wire> { Lock(Slot()).clone() }
+
+/// Forget the last round trip, before one that may not happen.
+///
+/// A tick that asks nothing must not paint the previous tick's bodies as if
+/// they were its own, so the caller clears the slot before it consults and
+/// reads it after.
+pub fn Clear() { *Lock(Slot()) = None; }
+
+/// Record one round trip, replacing the one before it.
+fn Keep(One:Wire) { *Lock(Slot()) = Some(One); }
 
 /// The transport, as the port that hides it.
 ///
@@ -81,20 +130,31 @@ impl Poster for Http {
 				return Err(Failure::Of("cancelled").With("the caller cancelled before the request was posted"));
 			}
 			let Some(Account) = self.Account.as_deref() else {
+				// The body was composed before this was reached, so it is
+				// recorded even though nothing was posted: the panel shows
+				// what would have been sent beside the word for why it was
+				// not, which is the diagnosis a missing credential needs.
+				Keep(Wire { Send:Request.Text(), Recv:String::new(), Error:Some("no account id".into()), Ms:0 });
 				return Err(Failure::Of("no account id").With("CLOUDFLARE_ACCOUNT_ID is unset"));
 			};
 			let Some(Token) = self.Token.as_deref() else {
+				Keep(Wire { Send:Request.Text(), Recv:String::new(), Error:Some("no token".into()), Ms:0 });
 				return Err(Failure::Of("no token").With("CLOUDFLARE_API_TOKEN is unset and CLOUDFLARE_ENV_FILE names no token"));
 			};
 
 			let Path = Request.Path();
 			let URL = Endpoint(Account, &Path);
 			let Body = Request.Text();
+			// The body as it will be recorded, kept apart from the copy the
+			// blocking call owns: the wire is what the page paints, and the
+			// closure needs the bytes to send.
+			let Sent = Body.clone();
 			let Token = Token.to_string();
 			// `Post` blocks on a child process. It owns its arguments, so the
 			// future holds no borrow of the request across the await.
 			let Work = move || Post(&URL, &Body, &Token);
 
+			let Started = Instant::now();
 			let Answer = match tokio::runtime::Handle::try_current() {
 				Ok(_) => {
 					let Joined = tokio::task::spawn_blocking(Work);
@@ -113,6 +173,11 @@ impl Poster for Http {
 				Err(_) => Work(),
 			};
 
+			let Elapsed = Started.elapsed().as_millis() as u64;
+			Keep(match &Answer {
+				Ok(Recv) => Wire { Send:Sent, Recv:Recv.clone(), Error:None, Ms:Elapsed },
+				Err(Why) => Wire { Send:Sent, Recv:String::new(), Error:Some(Why.clone()), Ms:Elapsed },
+			});
 			Answer.map_err(|Why| Failure::Of(Why).With(Path))
 		})
 	}

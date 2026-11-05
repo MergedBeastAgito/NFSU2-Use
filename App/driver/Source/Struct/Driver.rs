@@ -58,6 +58,7 @@ use crate::{
 		Expressions,
 		Gate::Gate,
 		Observe::Observe,
+		Poster::{Clear as ClearWire, Last as LastWire, Wire},
 	},
 	Struct::{Policy::Policy, Situation::Witness, State::Car},
 };
@@ -230,11 +231,21 @@ impl Driver {
 		// deliberate - the first tick has no window behind it, and a model
 		// handed a car it has never seen is being asked to guess.
 		let mut Consulted = Consulted::None();
+		// The round trip this tick made, as the page paints it. `None` on a
+		// tick that asked nothing: the slot is cleared before the consult so a
+		// previous tick's bodies are never read back as this tick's, and the
+		// payload then carries no `wire` key at all.
+		let mut Trip:Option<Wire> = None;
 		if let Some(Decider) = &self.Decider
 			&& Policy.Model.is_some()
 			&& Tick % Policy.Every == 0
 		{
+			ClearWire();
 			Consulted = Consult(&**Decider, &Reading, Bounded.clone()).await;
+			// A consultation that never reached the transport leaves the slot
+			// empty: `asked` is `-`, no `wire` is published, and the panel goes
+			// on showing the last exchange it was given.
+			Trip = LastWire();
 			// An answer that carried no `action` question is not a decision: the
 			// gate keeps the rules and the overlay still shows what came back.
 			if let Some(Advice) = &Consulted.Advice {
@@ -292,7 +303,7 @@ impl Driver {
 			self.Evaluate(&Expressions::Cruise(true, Kmh, Bias), Bounded.clone()).await?;
 		}
 
-		let Payload = json!({
+		let mut Payload = json!({
 			"tick": Tick,
 			"car": { "kmh": Car.Kmh, "gear": Car.Gear, "heading": Car.Heading, "pos": Car.Position, "rpm": Car.Rpm },
 			"scene": {
@@ -322,6 +333,31 @@ impl Driver {
 				"advised": Decision.Obeyed
 			}
 		});
+		// The round trip itself, byte for byte: the body that was composed and
+		// the body that came back, so the page shows the request the model
+		// actually answered rather than a reconstruction of it.
+		//
+		// Inserted only on a tick that made one. The page merges the payload
+		// into the object it already holds, so an absent key keeps the last
+		// exchange on screen between asks - which is what the panel is for -
+		// while an empty one would blank it on every tick the model was not
+		// asked. No header, no token, no URL: the body is `{model, state,
+		// questions}` and holds no secret, and a panel is the last place a
+		// credential may appear.
+		if let Some(One) = &Trip
+			&& let Some(Fields) = Payload.as_object_mut()
+		{
+			Fields.insert(
+				"wire".to_string(),
+				json!({
+					"send": One.Send,
+					"recv": Clip(&One.Recv),
+					"error": One.Error,
+					"ms": One.Ms,
+					"lane": Consulted.Lane,
+				}),
+			);
+		}
 		self.Evaluate(&Expressions::Publish(&Payload.to_string()), Bounded).await?;
 		Ok(Payload)
 	}
@@ -362,6 +398,21 @@ impl Adapter for Driver {
 			self.Browser.Dispose(self.Page.clone()).await;
 		})
 	}
+}
+
+/// A reply body, clipped to what the payload can carry.
+///
+/// The panel is a few lines of text, and a payload is repainted every tick: a
+/// model that answered at length would otherwise put kilobytes on the wire
+/// sixty times a minute for a reader who sees the first screenful. Counting
+/// characters rather than bytes so a clipped body is still valid UTF-8.
+fn Clip(Text:&str) -> String {
+	/// Characters one reply may carry into the payload.
+	const Limit:usize = 4000;
+	if Text.chars().count() <= Limit {
+		return Text.to_string();
+	}
+	Text.chars().take(Limit).collect()
 }
 
 /// A browser failure, in the adapter's vocabulary.
