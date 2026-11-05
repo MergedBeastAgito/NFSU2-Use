@@ -7,9 +7,10 @@
 #![allow(non_snake_case)]
 
 use AgenticNfsuDriver::{
-	Action, Advice, Budget, Car, Carry, DecideAction, Decision, Fail, Gate, Insist, ParseAdvice,
-	Situation, TurnOutTicks, Window, Witness,
+	Action, Advice, Budget, Car, Carry, DecideAction, Decision, Fail, Gate, Insist, Lead,
+	ParseAdvice, Situation, TurnOutTicks, Window, Witness,
 };
+use serde_json::json;
 
 /// A car doing 42 km/h: under the 45 target, so the throttle is expected on.
 fn Driving() -> Car { Car { Address:1, Kmh:42.0, Gear:3, Heading:12.5, ..Car::default() } }
@@ -327,6 +328,54 @@ fn every_word_the_model_may_say_is_performable() {
 		assert_eq!(Decision.Action, Action, "{Word}");
 		assert_eq!(Decision.Throttle, Throttle, "{Word}");
 	}
+}
+
+#[test]
+fn a_car_ahead_in_our_lane_is_the_lead() {
+	// The nearest car is not the interesting one: a car beside us at 12 m is
+	// not in the way, and a car 40 m ahead in our lane is. The lead is the one
+	// the question is asked about, so this ordering is the question's premise.
+	let mut Car = Driving();
+	Car.Traffic = vec![
+		Lead { Distance:12.0, Ahead:-9.0, Right:8.0, Kmh:30.0, Closing:0.0, Driver:4, Name:"TRAFFIC".into() },
+		Lead { Distance:40.0, Ahead:39.0, Right:1.0, Kmh:44.0, Closing:2.0, Driver:4, Name:"TRAFFIC".into() },
+	];
+	let Lead = Car.Lead().expect("a lead");
+	assert_eq!(Lead.Distance, 40.0, "the car ahead in lane is the lead");
+}
+
+#[test]
+fn the_scene_names_the_car_ahead_in_the_games_own_words() {
+	let mut Car = At(45.0, 0.0);
+	Car.Traffic = vec![Lead {
+		Distance:23.0,
+		Ahead:22.0,
+		Right:0.5,
+		Kmh:41.0,
+		Closing:14.0,
+		Driver:4,
+		Name:"TRAFFIC_SEDAN".into(),
+	}];
+	let Scene = Witness::default().Observe(&Car, true);
+	assert!(Scene.Sentence.contains("23 m ahead"), "{}", Scene.Sentence);
+	assert!(Scene.Sentence.contains("traffic"), "{}", Scene.Sentence);
+	assert!(Scene.Sentence.contains("TRAFFIC_SEDAN"), "{}", Scene.Sentence);
+	assert!(Scene.Sentence.contains("closing at 14 km/h"), "{}", Scene.Sentence);
+}
+
+#[test]
+fn a_row_the_page_sent_parses_into_a_lead() {
+	let Value = json!({
+		"car":1, "pos":[0.0,0.0,0.0], "heading":0.0, "speed":1.0, "kmh":3.0, "rpm":800, "gear":2,
+		"flow":6, "career_race":0, "track":4000,
+		"traffic":[{"d":23.4,"ahead":22.0,"right":0.5,"kmh":41.0,"closing":14.0,"drv":4,"name":"TRAFFIC_SEDAN"}]
+	});
+	let Car = Car::From(&Value).expect("a car");
+	assert_eq!(Car.Traffic.len(), 1, "the traffic row is the car ahead");
+	assert_eq!(Car.Traffic[0].Kind(), "traffic");
+	assert_eq!(Car.Traffic[0].Name, "TRAFFIC_SEDAN");
+	// The world state the game reports, not a default we invented.
+	assert_eq!((Car.Flow, Car.CareerRace, Car.Track), (6, 0, 4000));
 }
 
 /// One answer, captured from the live endpoint on this account.
