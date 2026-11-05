@@ -70,6 +70,10 @@ pub struct Advice {
 pub enum Fail {
 	/// No token in the environment or in Hermes' env file.
 	NoToken,
+	/// No account id in the environment. There is no default: an account id is
+	/// an identifier, and a hard-coded one ships somebody's account in a public
+	/// repository.
+	NoAccount,
 	/// curl is missing, would not start, or the transport failed.
 	Unavailable,
 	/// The deadline passed before an answer arrived.
@@ -85,6 +89,7 @@ impl Fail {
 	pub fn Why(&self) -> String {
 		match self {
 			Fail::NoToken => "no token".into(),
+			Fail::NoAccount => "no account id".into(),
 			Fail::Unavailable => "curl unavailable".into(),
 			Fail::Timeout => "timeout".into(),
 			Fail::Status(Code) => format!("http {Code}"),
@@ -147,7 +152,7 @@ pub fn Advise(Car:&Car, Cue:Option<f64>, Name:&str) -> Result<Advice, Fail> {
 		.or_else(FromDotEnv)
 		.filter(|Token| !Token.is_empty())
 		.ok_or(Fail::NoToken)?;
-	let Account = env::var("CLOUDFLARE_ACCOUNT_ID").unwrap_or_else(|_| "REDACTED-ACCOUNT-ID".into());
+	let Account = env::var("CLOUDFLARE_ACCOUNT_ID").map_err(|_| Fail::NoAccount)?;
 	let URL = format!("https://api.cloudflare.com/client/v4/accounts/{Account}/ai/run/@cf/cloudflare/{Bare}");
 	let State = json!({
 		"speed_kmh": Car.Kmh.round(),
