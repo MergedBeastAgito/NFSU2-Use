@@ -125,25 +125,26 @@ sec(obs, 'CUES');
 const cueBody = S(document.createElement('pre'), 'margin:0;color:#9fe8ff;white-space:pre-wrap;font:inherit'); cueBody.id = 'hc-body';
 obs.appendChild(cueBody);
 
-const dec = mk('hermes-dec', BOX + ';left:8px;bottom:118px;width:268px;max-height:calc(100vh - 260px);overflow:auto;pointer-events:auto;user-select:text');
+const dec = mk('hermes-dec', BOX + ';left:8px;bottom:118px;width:664px;max-height:calc(100vh - 240px);overflow:auto;pointer-events:auto;user-select:text');
 const decHdr = S(document.createElement('div'), 'color:#cfeeff;letter-spacing:.06em'); decHdr.textContent = 'DECISIONS';
 dec.appendChild(decHdr);
-// The rule under the title, then the decisions table, then the controls. The
-// panel answers "what is it doing" before it offers anything to change, and the
-// controls are grouped by the question each one answers. A flat row of switches
-// mixed three unrelated questions - what the car is doing, who decides, and
-// whether a request leaves - so LOCAL, REMOTE and PIPE read as one axis when
-// they were three. LOCAL and REMOTE are not switches at all: they are the two
-// halves the DRIVER choice already turns on, so they are reported, not set.
-const rule = S(document.createElement('div'), 'color:#3d566b;letter-spacing:.42em;margin:3px 0 1px;padding-left:.42em;text-align:center');
-rule.id = 'hd-rule'; rule.textContent = '| | | | |';
-dec.appendChild(rule);
+// The panel is columnar, and the columns are the panel: three of them, each
+// answering one kind of question and each read top-down on its own. The table
+// of candidates sits beside the switches that shape it rather than above them,
+// because a reader comparing what the car chose against who chose it is reading
+// across, not down. That is what the pipe row was trying to say and could not:
+// a column is a layout, not a character.
+const Columns = S(document.createElement('div'), 'display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:0 10px;align-items:start;margin-top:3px');
+dec.appendChild(Columns);
+const ColTable = S(document.createElement('div'), 'display:flex;flex-direction:column;min-width:0'); Columns.appendChild(ColTable);
+const ColDrive = S(document.createElement('div'), 'display:flex;flex-direction:column;min-width:0'); Columns.appendChild(ColDrive);
+const ColSense = S(document.createElement('div'), 'display:flex;flex-direction:column;min-width:0'); Columns.appendChild(ColSense);
 const decBody = S(document.createElement('div'), 'margin-top:2px'); decBody.id = 'hd-body';
-dec.appendChild(decBody);
+ColTable.appendChild(decBody);
 // What it is driving right now, in one line, so the panel answers "what is it
 // doing" before it lists what it could do.
 const driving = S(document.createElement('div'), 'margin:4px 0 2px;color:#eaf7ff'); driving.id = 'hd-driving';
-dec.appendChild(driving);
+ColTable.appendChild(driving);
 
 const BTN = 'font:inherit;color:#b9dcf2;background:rgba(255,255,255,.03);border:1px solid rgba(120,220,255,.22);border-radius:4px;padding:2px 4px;cursor:pointer;pointer-events:auto';
 const BTN_ON = BTN + ';border-color:rgba(120,220,255,.85);background:rgba(120,220,255,.2);color:#eaf7ff';
@@ -151,10 +152,11 @@ const BTN_OFF = BTN + ';border-color:rgba(255,120,120,.75);color:#ffb3b3';
 const LBL = 'color:#5f7d95;letter-spacing:.08em;font-size:8px;margin:6px 0 2px';
 // One labelled group per question, so a switch is never read as a peer of a
 // switch that answers something else.
-function Group(Name, Cols) {
+function Group(Name, Cols, Parent) {
+  const Into = Parent || dec;
   const Head = S(document.createElement('div'), LBL); Head.textContent = Name;
   const Row = S(document.createElement('div'), 'display:grid;grid-template-columns:repeat(' + Cols + ',1fr);gap:3px');
-  dec.appendChild(Head); dec.appendChild(Row);
+  Into.appendChild(Head); Into.appendChild(Row);
   return Row;
 }
 
@@ -163,7 +165,7 @@ function Group(Name, Cols) {
 // whatever the last person clicked. All four are shown at once so the lit cell
 // says where the car sits in the set rather than only what it is called.
 const MODES = ['cruise', 'race', 'recover', 'mission'];
-const modeRow = Group('MODE · read from the game', 4);
+const modeRow = Group('MODE · read from the game', 4, ColDrive);
 const modeCells = {};
 for (const M of MODES) {
   const c = S(document.createElement('div'), 'text-align:center;padding:2px 0;border:1px solid rgba(120,220,255,.14);border-radius:4px;color:#4f6b80');
@@ -182,7 +184,7 @@ const POWERS = [
 ];
 window.__power = window.__power || 'agentic';
 window.__pipe = window.__pipe || 'on';
-const powerEl = Group('DRIVER · who decides', 3);
+const powerEl = Group('DRIVER · who decides', 3, ColDrive);
 const powerBtns = {};
 for (const p of POWERS) {
   const b = document.createElement('button');
@@ -192,7 +194,7 @@ for (const p of POWERS) {
   powerEl.appendChild(b); powerBtns[p.id] = b;
 }
 const halves = S(document.createElement('div'), 'color:#5f7d95;font-size:9px;margin:2px 0 0'); halves.id = 'hd-halves';
-dec.appendChild(halves);
+ColDrive.appendChild(halves);
 
 // SENSE - what the driver can see. Memory reads the car out of the game's own
 // memory, Pixels reads the road and the route arrow from a captured frame, and
@@ -203,7 +205,7 @@ const SENSES = [
   {id:'gps',    label:'Both',   hint:'memory plus the route arrow from a frame'},
   {id:'road',   label:'Pixels', hint:'the road and the arrow from frames only'},
 ];
-const senseEl = Group('SENSE · what it can see', 3);
+const senseEl = Group('SENSE · what it can see', 3, ColSense);
 const senseBtns = {};
 for (const q of SENSES) {
   const b = document.createElement('button');
@@ -217,7 +219,7 @@ for (const q of SENSES) {
 // transport fact and not an authority: with the pipe broken the driver still
 // drives, and the WIRE panel says nothing was sent rather than implying the
 // model was asked and had no opinion.
-const pipeEl = Group('WIRE · does a request leave', 1);
+const pipeEl = Group('WIRE · does a request leave', 1, ColSense);
 const pipeBtn = document.createElement('button');
 pipeBtn.dataset.pipe = 'toggle'; S(pipeBtn, BTN);
 pipeBtn.addEventListener('click', () => { window.__pipe = window.__pipe === 'on' ? 'off' : 'on'; paint(true) });
@@ -235,7 +237,7 @@ const KNOBS = [
   {id:'every',  label:'model every', value:10, min:1, max:60,  step:1},
 ];
 window.__knobs = window.__knobs || {};
-const knobEl = Group('TUNING · page harness only', 2);
+const knobEl = Group('TUNING · page harness only', 2, ColSense);
 for (const k of KNOBS) {
   const cell = S(document.createElement('label'), 'display:flex;justify-content:space-between;gap:4px;color:#8fb8cf;font-size:9px');
   const name = S(document.createElement('span'), ''); name.textContent = k.label;

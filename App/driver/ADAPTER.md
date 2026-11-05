@@ -121,11 +121,11 @@ sixth.
 
 The model is a port the adapter holds, not code it carries: `Driver::New` takes
 an `Option<Arc<dyn DecidePort>>`, and `Source/Main.rs` builds it from the corpus
-(`Source/Fn/Corpus.rs`: the directory, the five lanes' priority, the run's
-ceiling), the transport (`Source/Fn/Poster.rs`: the `Poster` `agentic-lane`
-never implements) and nothing else. A run without a model - or with a corpus
-that does not load - passes `None` and drives on the rules alone; the startup
-line says which of the two happened.
+(`Source/Fn/Corpus.rs`: the directory and the run's ceiling - the lanes, their
+conditions and their templates are the corpus's), the transport
+(`Source/Fn/Poster.rs`: the `Poster` `agentic-lane` never implements) and nothing
+else. A run without a model - or with a corpus that does not load - passes `None`
+and drives on the rules alone; the startup line says which of the two happened.
 
 ## What this crate demonstrates
 

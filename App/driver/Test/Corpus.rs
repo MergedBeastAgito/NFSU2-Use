@@ -45,7 +45,7 @@ use std::{
 
 use AgenticLane::{
 	Answer, Answered, Budget, Compose, Context, Create, Decider, Error, Failure, Load, Options, Poster, Predicate,
-	Request, Rules, Select, SelectLane, Selection, State as Reading, Usage,
+	Request, Rule, Rules, Select, SelectLane, Selection, State as Reading, Usage, When,
 };
 use AgenticLane::DecidePort;
 use AgenticNfsuDriver::{Car, Consult, Consulted, CorpusRoot, Endpoint, Http, Observe, Situation, TemplateRules};
@@ -240,6 +240,87 @@ fn the_corpus_states_every_condition_and_one_catch_all() {
 			Case.Name, Lane.Name, Case.Lane
 		);
 	}
+}
+
+#[test]
+fn the_conditions_agree_with_the_priority_they_replaced_on_every_reachable_reading() {
+	// The migration's promise is not "the five cases still work" but "no reading
+	// selects a different lane". This walks the cross-product of the fields the
+	// conditions read - every verdict, both race flags, a turn either side of the
+	// threshold, a gap on either side of the 60 m one, and each of them absent -
+	// and compares the corpus's answer with the rule list this crate carried
+	// before the conditions moved into the file. The rule list is the oracle, and
+	// it is the old code path with the old rules rather than a second translation
+	// of them.
+	let Corpus = Corpus();
+	let mut Compared = 0u32;
+	for Verdict in [None, Some("moving"), Some("creeping"), Some("blocked"), Some("stalled")] {
+		for RaceType in [0.0, 1.0] {
+			for CareerRace in [0.0, 3.0] {
+				for Turned in [None, Some(0.0), Some(13.0)] {
+					for Lead in [None, Some(0.0), Some(30.0), Some(90.0)] {
+						let mut Body = json!({
+							"speed_kmh": 60,
+							"gear": 3,
+							"racetype": RaceType,
+							"career_race": CareerRace
+						});
+						if let Some(Word) = Verdict {
+							Body["verdict"] = json!(Word);
+						}
+						if let Some(Degrees) = Turned {
+							Body["turned_degrees"] = json!(Degrees);
+						}
+						if let Some(Metres) = Lead {
+							Body["lead_m"] = json!(Metres);
+						}
+						let Reading = Reading::Of(Body).expect("a JSON object is a reading");
+						let Chosen = Select(&Corpus, &Reading, &Rules::default(), &TemplateRules())
+							.expect("the corpus names a lane for every reading");
+						let Before = Before(&Corpus, &Reading);
+						assert_eq!(
+							Chosen.Lane.Name, Before,
+							"the corpus selects '{}' where the priority selected '{Before}' for {}",
+							Chosen.Lane.Name,
+							Reading.Body()
+						);
+						Compared += 1;
+					}
+				}
+			}
+		}
+	}
+	println!("compared {Compared} readings against the priority that was here before");
+	assert_eq!(Compared, 5 * 2 * 2 * 3 * 4, "every combination was walked");
+}
+
+/// The priority this crate carried before the conditions moved into the corpus,
+/// as a rule list over the same readings.
+///
+/// Kept as an oracle and not as policy: it is the old code path with the old
+/// rules, so a corpus condition that drifts from it fails by the reading rather
+/// than by a reviewer noticing.
+fn Before(Corpus:&AgenticLane::Corpus, Reading:&Reading) -> String {
+	let Priority = Rules::New(vec![
+		Rule::New(
+			"recover",
+			When::Any(vec![When::Equal("verdict", "blocked"), When::Equal("verdict", "stalled")]),
+		),
+		Rule::New(
+			"race",
+			When::Any(vec![When::Above("racetype", 0.0), When::Above("career_race", 0.0)]),
+		),
+		Rule::New("corner", When::Above("turned_degrees", 12.0)),
+		Rule::New(
+			"context",
+			When::All(vec![When::Above("lead_m", 0.0), When::Below("lead_m", 60.0)]),
+		),
+	])
+	.Falling("drive");
+	Select(Corpus, Reading, &Priority, &TemplateRules())
+		.expect("the priority names a lane for every reading")
+		.Lane
+		.Name
 }
 
 #[test]

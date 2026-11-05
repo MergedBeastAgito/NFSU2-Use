@@ -81,8 +81,14 @@ visual. Until that is measured, this template is a template, not a controller.
 
 A lane is a request _shape_: the fields a question actually reads, not all
 sixteen. `Questions.json` declares five - `drive`, `recover`, `corner`, `race`,
-`context` - each naming its fields, its templates and how often it is worth
-sending.
+`context` - each naming its fields, its templates, how often it is worth
+sending, and the `select` condition that chooses it.
+
+The condition is what used to be a rule in Rust. Each lane excludes the lanes
+that outrank it - `recover` first, because a jammed car is not racing, then
+`race`, `corner` and `context` - so exactly one condition holds for a reading
+and `drive` is the single catch-all. Adding a lane, or moving one up the order,
+is an edit to this file and nothing else.
 
 Measured with the same question (`freeroam.track_cue`) against `clef-flash`:
 
