@@ -22,13 +22,20 @@ path = "Source/Main.rs"
 # directory holding this repository. A clone that puts it elsewhere edits this
 # line or passes `--config`; nothing here names a machine.
 #
-# One dependency, and no internal package beside it - not even for the `script!`
-# macro this crate's expressions are baked with. The macro comes through the
-# facade (`pub use AgenticRuntime::script;`), which is what makes the facade a
-# facade: a consumer that had to name `agentic-runtime` for one macro would still
-# be pinned to the workspace's internal crate names.
+# Two dependencies from this tree, and no internal package beside them - not
+# even for the `script!` macro this crate's expressions are baked with. The
+# macro comes through the facade (`pub use AgenticRuntime::script;`), which is
+# what makes the facade a facade: a consumer that had to name `agentic-runtime`
+# for one macro would still be pinned to the workspace's internal crate names.
+#
+# `agentic-lane` is the one crate the facade deliberately does not carry: it
+# re-exports the ports a consumer's browsing flow needs, and
+# `agentic.lane.decide` is named in `Crate/Sdk/Source/Library.rs` as
+# deliberately left out. A consumer that drives a decision model therefore
+# names the crate itself, from a path that sits beside the facade's.
 [dependencies]
 agentic-sdk = { path = "../../../../Agentic/Crate/Sdk" }
+agentic-lane = { path = "../../../../Agentic/Crate/Lane" }
 tokio = { version = "1", features = [
 	"rt-multi-thread",
 	"macros",
