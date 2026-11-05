@@ -91,7 +91,7 @@ impl Lead {
 			1 => "the player",
 			3 => "an AI racer",
 			4 => "traffic",
-			0 => "a friend's car",
+			0 => "a parked car",
 			_ => "a car",
 		}
 	}

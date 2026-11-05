@@ -57,18 +57,34 @@
 					const Dz = f32(Node + 0x68) - Pos[2];
 					const Distance = Math.hypot(Dx, Dy, Dz);
 					if (Node !== Car && Distance > 0.5 && Distance <= 150) {
+						// Their speed from the same field ours comes from, and
+						// only for a car the game says has a driver: the
+						// free-roam opponent pool is drv 0, and its +0x430 is
+						// not a speed - read as one it put 220 km/h on a parked
+						// car. The velocity vector is used for the closing rate
+						// only when it agrees with that field.
+						const Driver = u32(Node + 0x24);
+						const Live = Driver === 1 || Driver === 3 || Driver === 4;
+						const TheirSpeed = Live ? f32(Node + 0x430) : 0;
+						const TheirVel = Math.hypot(Their[0], Their[1]);
+						const Agrees =
+							Live &&
+							TheirVel > 0.1 &&
+							Math.abs(TheirVel - Math.abs(TheirSpeed)) / TheirVel < 0.35;
 						Traffic.push({
-							drv: u32(Node + 0x24),
+							drv: Driver,
 							name: Text(u32(Node + 0x0c)),
 							d: +Distance.toFixed(1),
 							ahead: +((Dx * Vel[0] + Dy * Vel[1]) / Reach).toFixed(1),
 							right: +((Dx * Vel[1] - Dy * Vel[0]) / Reach).toFixed(1),
-							kmh: Math.round(Math.hypot(Their[0], Their[1]) * 3.6),
-							closing: +(
-								(-((Their[0] - Vel[0]) * Dx + (Their[1] - Vel[1]) * Dy) /
-									Distance) *
-								3.6
-							).toFixed(0),
+							kmh: Math.round(Math.abs(TheirSpeed) * 3.6),
+							closing: Agrees
+								? +(
+										(-((Their[0] - Vel[0]) * Dx + (Their[1] - Vel[1]) * Dy) /
+											Distance) *
+										3.6
+									).toFixed(0)
+								: 0,
 						});
 					}
 					Node = u32(Node);
