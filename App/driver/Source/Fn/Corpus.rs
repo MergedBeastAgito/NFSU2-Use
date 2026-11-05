@@ -1,20 +1,15 @@
-//! The corpus this game drives with: where it sits, and the rules that choose a
-//! lane from it.
+//! The corpus this game drives with: where it sits, and how it is opened.
 //!
 //! `Templates/Questions.json` declares five lanes as data - `drive`, `recover`,
-//! `corner`, `race`, `context` - and each one is a request *shape*: the fields a
-//! question reads, and the templates it serves. What the corpus cannot state is
-//! **which lane applies**, and that is deliberate. A lane's condition is often a
-//! reading the file has no access to - `blocked_ticks` is a counter this crate
-//! keeps across ticks - so the condition is the caller's, expressed as
-//! [`AgenticLane::Rules`] over the same field names the observation declares.
-//! This file is that policy, and it is the one place the priority is written.
+//! `corner`, `race`, `context` - and each one is both a request *shape* (the
+//! fields a question reads, and the templates it serves) and a *condition*
+//! (`select`, a predicate over the observation's own field names). Nothing in
+//! this file restates either. The priority this crate once carried twice - as
+//! `Struct::Mode`'s four words, then as a rule list here - is now the order the
+//! conditions themselves encode: each lane excludes the lanes that outrank it,
+//! so exactly one holds and `drive` is the single catch-all.
 //!
-//! # The order, and where it came from
-//!
-//! This crate used to state the same priority twice: once as `Struct::Mode`'s
-//! four words, and once implicitly in which question the tick asked. `Mode` is
-//! gone and the order below is the only statement of it:
+//! # The order, and why it is that order
 //!
 //! 1. **`recover`** - the scene says the car cannot make progress. First,
 //!    because a jammed car is not cruising whatever the race flags say; this was
@@ -26,18 +21,27 @@
 //!    The lane's own `why` names yaw rate; the ingestion does not read yaw rate
 //!    yet, so the condition is the heading change the witness already measures.
 //! 4. **`context`** - another car is near enough to matter (the `traffic.follow`
-//!    threshold, 60 m). The corpus calls this the slow lane for judgement rather
-//!    than control, which is why it sits above only the ordinary tick.
-//! 5. **`drive`** - the fallback, and not a rule: a trace should be able to say
-//!    whether a lane was chosen by its condition or by exhaustion.
+//!    threshold, 60 m) and near enough to be a car at all. The corpus calls this
+//!    the slow lane for judgement rather than control, which is why it sits above
+//!    only the ordinary tick.
+//! 5. **`drive`** - the fallback, and not a condition: a trace should still be
+//!    able to say whether a lane was chosen by its condition or by exhaustion,
+//!    and a lane whose `select` is `always` is selected only when nothing else
+//!    holds.
 //!
-//! # The template order, and the mission/cruise split
+//! Editing that order is editing JSON, and a lane that names no condition is a
+//! catch-all. Two catch-alls are refused at selection rather than resolved by
+//! taking whichever lane the map sorted first, which is what keeps the file - and
+//! not this crate - the authority on when a lane applies.
+//!
+//! # The one preference the corpus cannot state
 //!
 //! The `drive` lane serves `freeroam.track_cue` first and `freeroam.cruise`
-//! second. A lane's own list is a preference, so the first template is the
-//! ordinary question; the rule below overrides it when no route arrow is on
-//! screen. That is where the old `Mission` / `Cruise` distinction lives now: it
-//! was never two lanes, it was one shape asking two questions.
+//! second, and which of the two is asked depends on whether a route arrow was
+//! found on screen. The predicate vocabulary has no "absent" operator - a
+//! comparison over a field nobody observed is simply false - so that preference
+//! stays a caller rule. It is the last rule list in this crate, and it names one
+//! template.
 //!
 //! # Loading is a startup failure, not a tick failure
 //!
@@ -56,21 +60,6 @@ use std::{
 use AgenticLane::{Budget, Create, Decider, Load, Options, Rule, Rules, When};
 
 use crate::Fn::Poster::Http;
-
-/// How many degrees of heading change over one measurement window make a corner.
-///
-/// The window is six ticks (`Struct::Situation::Window`), so this is roughly ten
-/// degrees a second: a car changing lanes does not reach it, a car taking a turn
-/// does. It is a threshold for choosing a *question*, not for acting, so the
-/// exact number decides which question is asked and never what the car does.
-pub const CornerDegrees:f64 = 12.0;
-
-/// How near another car has to be for the context lane to be worth asking.
-///
-/// The same 60 m the corpus's `traffic.follow` template states, because the two
-/// are one decision: the question is about a car close enough to change the
-/// line.
-pub const NearMetres:f64 = 60.0;
 
 /// The corpus directory, relative to this crate.
 ///
@@ -99,30 +88,6 @@ pub fn Root(Given:Option<&str>) -> PathBuf {
 	Path::new(env!("CARGO_MANIFEST_DIR")).join(Relative)
 }
 
-/// The five lanes, in the order a reading is tested against them.
-///
-/// First match wins. The fallback is `drive` rather than a fifth rule, so a
-/// selection by exhaustion and a selection by condition stay distinguishable in
-/// the trace.
-pub fn Priority() -> Rules {
-	Rules::New(vec![
-		Rule::New(
-			"recover",
-			When::Any(vec![When::Equal("verdict", "blocked"), When::Equal("verdict", "stalled")]),
-		),
-		Rule::New(
-			"race",
-			When::Any(vec![When::Above("racetype", 0.0), When::Above("career_race", 0.0)]),
-		),
-		Rule::New("corner", When::Above("turned_degrees", CornerDegrees)),
-		Rule::New(
-			"context",
-			When::All(vec![When::Above("lead_m", 0.0), When::Below("lead_m", NearMetres)]),
-		),
-	])
-	.Falling("drive")
-}
-
 /// The template the drive lane asks when no route arrow is on screen.
 ///
 /// One rule for every lane, which is what a rule list is for: a rule naming a
@@ -136,13 +101,16 @@ pub fn Templates() -> Rules {
 ///
 /// The three things a caller decides are the three arguments: the model a lane
 /// that names none asks, the run's ceiling, and which corpus. Everything else -
-/// the lanes, the templates, the questions - is the corpus's.
+/// the lanes, their conditions, the templates, the questions - is the corpus's,
+/// which is why the lane rules passed to [`Create`] are empty: an empty list
+/// means "select by the corpus's own conditions" and a caller that stated rules
+/// would be stating a second policy over the same readings.
 pub fn Open(Model:&str, Ceiling:Budget, Given:Option<&str>) -> Result<Arc<Decider>, String> {
 	let Root = Root(Given);
 	let Corpus = Load(&Root).map_err(|Why| format!("{} does not load: {Why}", Root.display()))?;
 	Ok(Arc::new(Create(
 		Corpus,
 		Arc::new(Http::New()),
-		Options { Model:Model.to_string(), Lanes:Priority(), Templates:Templates(), Budget:Ceiling },
+		Options { Model:Model.to_string(), Lanes:Rules::default(), Templates:Templates(), Budget:Ceiling },
 	)))
 }

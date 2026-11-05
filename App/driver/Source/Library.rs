@@ -61,10 +61,11 @@
 //! - [`Fn::Observe`] turns one tick into the field names the corpus uses. It
 //!   writes only what was measured; a field the ingestion does not read yet
 //!   travels as `null` rather than as a plausible number.
-//! - [`Fn::Corpus`] states the lane priority and the template preference - the
-//!   order that used to be `Struct::Mode` - and loads the corpus once, at
-//!   startup, so a broken corpus is a sentence before the first tick rather than
-//!   a surprise in the tenth.
+//! - [`Fn::Corpus`] opens the corpus that states the lanes, their conditions and
+//!   their templates, and keeps the one preference a predicate cannot state (the
+//!   cruise question when no route arrow was found). It loads once, at startup,
+//!   so a broken corpus is a sentence before the first tick rather than a
+//!   surprise in the tenth.
 //! - [`Fn::Poster::Http`] is the `Poster` the Lane crate never implements: the
 //!   credentials, curl, the status code and the caller's deadline. It is the one
 //!   file in this crate that opens a socket.
@@ -87,7 +88,7 @@ pub use crate::{
 	Fn::{
 		Cloudflare::{Account, Endpoint, Post, Token},
 		Consult::{Advice, Consult, Consulted},
-		Corpus::{Open as OpenCorpus, Priority, Root as CorpusRoot, Templates as TemplateRules},
+		Corpus::{Open as OpenCorpus, Root as CorpusRoot, Templates as TemplateRules},
 		Decide::{BackTicks, Carry, Decide as DecideAction, TurnOutTicks},
 		Expressions::{Bootstrap, Cruise, Hold, Publish, Release, State},
 		Gate::Gate,

@@ -5,9 +5,12 @@
 //! from a string, and the port answers from an [`Answer`] a test wrote. What that
 //! proves is the four claims the rewire makes:
 //!
-//! - **the priority still selects the lanes it always did** - one representative
-//!   reading per lane, built by the crate's own [`Observe`], so the case is a
-//!   state this driver can actually produce rather than a JSON literal;
+//! - **the corpus's own conditions still select the lanes it always did** - one
+//!   representative reading per lane, built by the crate's own [`Observe`], so
+//!   the case is a state this driver can actually produce rather than a JSON
+//!   literal. The priority this crate once stated in Rust is the order the
+//!   lanes' `select` predicates encode, and the test below drives the corpus's
+//!   conditions rather than a rule list beside them;
 //! - **the request is the lane's** - exactly `{model, state, questions}`, the
 //!   lane's fields and no others, posted to the decision route;
 //! - **a failed consultation is not a failed tick** - the lane it chose survives
@@ -24,8 +27,9 @@
 //! `Crate/Lane` refuses to name a caller: its tests build their own corpora. The
 //! names `drive`, `recover`, `corner`, `race` and `context` are this game's
 //! vocabulary, so the assertion that *this* corpus selects them belongs to the
-//! crate that carries the corpus - and to the priority it states, which is the
-//! one thing the corpus cannot say for itself.
+//! crate that carries the corpus. The corpus states its own conditions; what is
+//! asserted here is that the conditions a run actually reads select the lanes
+//! this game drives with, from readings this game actually produces.
 
 #![allow(non_snake_case, non_upper_case_globals)]
 
@@ -40,19 +44,19 @@ use std::{
 };
 
 use AgenticLane::{
-	Answer, Answered, Budget, Compose, Create, Decider, Error, Failure, Load, Options, Poster, Request, Select, Selection,
-	State as Reading, Usage,
+	Answer, Answered, Budget, Compose, Context, Create, Decider, Error, Failure, Load, Options, Poster, Predicate,
+	Request, Rules, Select, SelectLane, Selection, State as Reading, Usage,
 };
 use AgenticLane::DecidePort;
-use AgenticNfsuDriver::{Car, Consult, Consulted, CorpusRoot, Endpoint, Http, Observe, Priority, Situation, TemplateRules};
+use AgenticNfsuDriver::{Car, Consult, Consulted, CorpusRoot, Endpoint, Http, Observe, Situation, TemplateRules};
 use AgenticSdk::{Call, FutureBox, Never, Wall};
 use serde_json::{Value, json};
 
 /// The five lanes the corpus declares, and the template each serves first.
 ///
-/// Listed in the order the priority tests them, because that order is the claim:
-/// `recover` outranks a race, a race outranks a corner, and the ordinary tick is
-/// the fallback rather than a rule.
+/// Listed in the order the conditions rank them, because that order is the
+/// claim: `recover` outranks a race, a race outranks a corner, and the ordinary
+/// tick is the fallback rather than a condition.
 const LANES:[(&str, &str); 5] = [
 	("recover", "recovery.blocked"),
 	("race", "race.start"),
@@ -175,12 +179,12 @@ fn Cases() -> Vec<Case> {
 fn Reading(Case:&Case) -> Reading { Observe(&Case.Car, &Case.Scene, Case.Cue) }
 
 #[test]
-fn the_priority_selects_each_of_the_five_lanes() {
+fn the_corpus_selects_each_of_the_five_lanes() {
 	let Corpus = Corpus();
 	let mut Seen:BTreeSet<String> = BTreeSet::new();
 	for Case in Cases() {
 		let Reading = Reading(&Case);
-		let Chosen = Select(&Corpus, &Reading, &Priority(), &TemplateRules())
+		let Chosen = Select(&Corpus, &Reading, &Rules::default(), &TemplateRules())
 			.unwrap_or_else(|Why| panic!("case '{}': {Why}", Case.Name));
 		println!("case {:<18} selected {:<30} {}", Case.Name, Chosen.Name(), Reading.Body());
 		assert_eq!(
@@ -200,6 +204,45 @@ fn the_priority_selects_each_of_the_five_lanes() {
 }
 
 #[test]
+fn the_corpus_states_every_condition_and_one_catch_all() {
+	// The migration's claim, in the only place it can be checked: the lane
+	// conditions are data. Every lane but one states a predicate, the one that
+	// does not is the fallback, and each condition reads fields the observation
+	// names - so a typo fails at load rather than selecting a lane nobody meant.
+	let Corpus = Corpus();
+	let mut Catch:Vec<String> = Vec::new();
+	for Lane in Corpus.Lanes() {
+		if matches!(Lane.Select, Predicate::Always) {
+			Catch.push(Lane.Name.clone());
+			continue;
+		}
+		for Field in Lane.Select.Fields() {
+			assert!(
+				Corpus.Observed(Field),
+				"lane {} selects on {Field}, which the observation neither reads nor derives",
+				Lane.Name
+			);
+		}
+		println!("lane {:<8} when {}", Lane.Name, Lane.Select.Line());
+	}
+	assert_eq!(Catch, vec!["drive".to_string()], "exactly one lane is the catch-all: {Catch:?}");
+
+	// And the corpus alone - no rule list at all - reaches the same lane each
+	// case asserts. That is what makes the conditions the policy rather than a
+	// comment beside one.
+	for Case in Cases() {
+		let Reading = Reading(&Case);
+		let Lane = SelectLane(&Corpus, &Context::from(&Reading))
+			.unwrap_or_else(|Why| panic!("case '{}': {Why}", Case.Name));
+		assert_eq!(
+			Lane.Name, Case.Lane,
+			"case '{}' selects '{}' from the corpus's own condition, and the case expects '{}'",
+			Case.Name, Lane.Name, Case.Lane
+		);
+	}
+}
+
+#[test]
 fn recover_outranks_a_race_because_a_jammed_car_is_not_racing() {
 	// The one ordering that is a judgement rather than an enumeration: the old
 	// `Mode::Of` put recovery first for this reason, and a rewire that let a race
@@ -207,7 +250,7 @@ fn recover_outranks_a_race_because_a_jammed_car_is_not_racing() {
 	let Corpus = Corpus();
 	let Car = Car { Address:1, Kmh:0.0, Gear:1, RaceType:1, CareerRace:3, ..Car::default() };
 	let Reading = Observe(&Car, &Scene("blocked", 0.0, None), Some(0.5));
-	let Chosen = Select(&Corpus, &Reading, &Priority(), &TemplateRules()).expect("a lane holds");
+	let Chosen = Select(&Corpus, &Reading, &Rules::default(), &TemplateRules()).expect("a lane holds");
 	assert_eq!(Chosen.Lane.Name, "recover", "{}", Reading.Body());
 }
 
@@ -221,12 +264,12 @@ fn the_drive_lane_asks_the_cruise_question_when_no_cue_is_on_screen() {
 	let With = Observe(&Car, &Scene, Some(0.4));
 	let Without = Observe(&Car, &Scene, None);
 	assert_eq!(
-		Select(&Corpus, &With, &Priority(), &TemplateRules()).expect("a lane holds").Template.Name,
+		Select(&Corpus, &With, &Rules::default(), &TemplateRules()).expect("a lane holds").Template.Name,
 		"freeroam.track_cue",
 		"a cue on screen is the route question"
 	);
 	assert_eq!(
-		Select(&Corpus, &Without, &Priority(), &TemplateRules()).expect("a lane holds").Template.Name,
+		Select(&Corpus, &Without, &Rules::default(), &TemplateRules()).expect("a lane holds").Template.Name,
 		"freeroam.cruise",
 		"no cue is the cruise question"
 	);
@@ -318,7 +361,7 @@ fn Decider() -> (Decider, Arc<Capture>) {
 		Poster.clone(),
 		Options {
 			Model:"clef-flash".to_string(),
-			Lanes:Priority(),
+			Lanes:Rules::default(),
 			Templates:TemplateRules(),
 			// No ceiling: this test is about the body, not the invoice.
 			Budget:Budget::New(0, 0),
@@ -521,7 +564,7 @@ fn Over(Account:Option<&str>, Token:Option<&str>, Reply:&str) -> (Decider, Arc<R
 		Arc::new(Http),
 		Options {
 			Model:"clef-flash".to_string(),
-			Lanes:Priority(),
+			Lanes:Rules::default(),
 			Templates:TemplateRules(),
 			Budget:Budget::New(0, 0),
 		},
@@ -638,7 +681,7 @@ async fn the_adapter_reports_a_transport_failure_as_the_lane_it_was_asking() {
 	let Decider = Create(
 		Corpus(),
 		Arc::new(Refusing),
-		Options { Model:"clef-flash".to_string(), Lanes:Priority(), Templates:TemplateRules(), Budget:Budget::New(0, 0) },
+		Options { Model:"clef-flash".to_string(), Lanes:Rules::default(), Templates:TemplateRules(), Budget:Budget::New(0, 0) },
 	);
 	let Case = Cases().into_iter().find(|Case| Case.Lane == "corner").expect("the corner case");
 	let Reading = Reading(&Case);

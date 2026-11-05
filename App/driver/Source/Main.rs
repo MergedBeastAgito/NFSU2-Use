@@ -32,7 +32,7 @@
 use std::{sync::Arc, time::Duration};
 
 use AgenticLane::{Budget, DecidePort, Decider};
-use AgenticNfsuDriver::{Driver, OpenCorpus, Policy, Priority};
+use AgenticNfsuDriver::{Driver, OpenCorpus, Policy};
 use AgenticSdk::{Adapter, Browse, Call, Chrome, ChromeOptions, Clock, Create, Never, OpenOptions, Options, Tokio};
 
 /// One argument's value.
@@ -167,12 +167,18 @@ async fn main() -> Result<(), String> {
 			Ok(Decider) => {
 				let Corpus = Decider.Corpus();
 				println!(
-					"corpus {} · {} lanes · {} templates · priority {}",
+					"corpus {} · {} lanes · {} templates",
 					Corpus.Root().map(|Root| Root.display().to_string()).unwrap_or_else(|| "-".to_string()),
 					Corpus.Lanes().count(),
-					Corpus.Templates().count(),
-					Priority().Names().join(" > ")
+					Corpus.Templates().count()
 				);
+				// The conditions are the corpus's, so the line that used to print
+				// the crate's priority now prints what the file says - a run that
+				// selected an unexpected lane is answered by this line and the
+				// `why` beside it, not by reading the source.
+				for Lane in Corpus.Lanes() {
+					println!("lane {:<8} when {}", Lane.Name, Lane.Select.Line());
+				}
 				Some(Decider)
 			},
 			Err(Why) => {

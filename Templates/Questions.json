@@ -1,7 +1,8 @@
 {
 	"$comment": "Question templates, one per use case. Each is a Clef `questions` object: typed questions over the fields in Observation.json, with every allowed option written out so the model returns a probability per option rather than free text. Compose a request as {model, state, questions}.",
 	"version": 1,
-	"$lanes": "A lane is a request shape, not a request: each names the fields it sends and the templates it serves. A driving tick sends the numbers the question reads plus the sentence that says what they mean; a recovery tick sends the window's metres and the wheel state; the full state is only for the slow lane. Sending everything every tick is the thing this avoids - it costs tokens, latency and money for fields the question never reads. What it must never avoid is the sentence: a model given numbers and no description answers as if the road were empty, which is how a car ends up holding the throttle against a wall.",
+	"$lanes": "A lane is a request shape, not a request: each names the fields it sends, the templates it serves, and the `select` condition that chooses it. A driving tick sends the numbers the question reads plus the sentence that says what they mean; a recovery tick sends the window's metres and the wheel state; the full state is only for the slow lane. Sending everything every tick is the thing this avoids - it costs tokens, latency and money for fields the question never reads. What it must never avoid is the sentence: a model given numbers and no description answers as if the road were empty, which is how a car ends up holding the throttle against a wall.",
+	"$select": "A lane's `select` is a predicate over the observation's own field names, in the closed vocabulary `always | eq | ne | in | gt | lt | and | or | not` (Crate/Lane/Source/Struct/Predicate.rs). Exactly one conditional lane may hold for a reading and `drive` is the single catch-all, so the order this file used to state in prose - recover, race, corner, context, drive - is written into the conditions: each lane excludes the ones that outrank it. The order is a judgement, not an enumeration: a jammed car is not racing, so `recover` outranks `race`.",
 	"lanes": {
 		"drive": {
 			"fields": [
@@ -16,6 +17,7 @@
 				"blocked_ticks"
 			],
 			"templates": ["freeroam.track_cue", "freeroam.cruise"],
+			"select": { "op": "always" },
 			"cadence": "every tick (150-250 ms)",
 			"why": "the fastest lane: the numbers plus the sentence that says what they mean - five numbers and no description is what made the model answer 'throttle' at a wall"
 		},
@@ -32,6 +34,7 @@
 				"surface"
 			],
 			"templates": ["recovery.blocked", "surface.loss"],
+			"select": { "op": "in", "field": "verdict", "values": ["blocked", "stalled"] },
 			"cadence": "only while blocked, creeping or slipping",
 			"why": "the escape lane: the window's metres are the evidence that the car is against something, and reversing with the wheel turned is the only way out of it"
 		},
@@ -43,12 +46,42 @@
 				"yaw_rate"
 			],
 			"templates": ["corner.entry"],
+			"select": {
+				"op": "and",
+				"of": [
+					{ "op": "gt", "field": "turned_degrees", "than": 12 },
+					{ "op": "not", "of": { "op": "in", "field": "verdict", "values": ["blocked", "stalled"] } },
+					{
+						"op": "not",
+						"of": {
+							"op": "or",
+							"of": [
+								{ "op": "gt", "field": "racetype", "than": 0 },
+								{ "op": "gt", "field": "career_race", "than": 0 }
+							]
+						}
+					}
+				]
+			},
 			"cadence": "on approach to a turn",
 			"why": "yaw rate says how the car is actually rotating, which the cue alone cannot"
 		},
 		"race": {
 			"fields": ["speed_kmh", "gear", "racetype", "track", "route_cue_x"],
 			"templates": ["race.start"],
+			"select": {
+				"op": "and",
+				"of": [
+					{
+						"op": "or",
+						"of": [
+							{ "op": "gt", "field": "racetype", "than": 0 },
+							{ "op": "gt", "field": "career_race", "than": 0 }
+						]
+					},
+					{ "op": "not", "of": { "op": "in", "field": "verdict", "values": ["blocked", "stalled"] } }
+				]
+			},
 			"cadence": "when racetype is 1 or 7",
 			"why": "the race lane adds the two fields that say a race is on at all"
 		},
@@ -64,6 +97,25 @@
 				"road_band_motion"
 			],
 			"templates": ["traffic.ghost"],
+			"select": {
+				"op": "and",
+				"of": [
+					{ "op": "gt", "field": "lead_m", "than": 0 },
+					{ "op": "lt", "field": "lead_m", "than": 60 },
+					{ "op": "not", "of": { "op": "in", "field": "verdict", "values": ["blocked", "stalled"] } },
+					{
+						"op": "not",
+						"of": {
+							"op": "or",
+							"of": [
+								{ "op": "gt", "field": "racetype", "than": 0 },
+								{ "op": "gt", "field": "career_race", "than": 0 }
+							]
+						}
+					},
+					{ "op": "not", "of": { "op": "gt", "field": "turned_degrees", "than": 12 } }
+				]
+			},
 			"cadence": "rarely - a slow lane for judgement, not control",
 			"why": "the full state, for questions where latency does not matter"
 		}
