@@ -28,9 +28,31 @@
 //!   decision takes a cue argument it may be given `None` for.
 //!
 //! The model is an advisor with a probability, and the rules are the driver.
-//! The split lives in one place each: [`Fn::Cloudflare`] asks and parses,
-//! [`Fn::Gate`] decides whether the answer is obeyed, [`Struct::Budget`] says
-//! when a run has asked enough.
+//! The split lives in one place each: [`Fn::Gate`] decides whether an answer is
+//! obeyed, [`Fn::Decide`] decides what the car does when it is not, and the
+//! round trip that produces the answer is `agentic.lane.decide`'s.
+//!
+//! # What this crate no longer carries
+//!
+//! The lane and template machinery moved to the Lane crate (`agentic-lane`,
+//! `Crate/Lane`), which owns it for every caller rather than for this game. What
+//! went, and where it lives now:
+//!
+//! - `Fn::Send` - the composed state, the mode's dimensions, the per-mode
+//!   question and the tick rotation. That is `Fn::Select` + `Fn::Compose` over
+//!   the corpus, which is `Templates/Questions.json` here.
+//! - `Fn::Cloudflare`'s `Advice`, `Parse`, `Fail`, `Models` and `Resolve` - the
+//!   reply's shape, the model's name and the failure vocabulary. Those are
+//!   `Fn::Parse`, `Fn::Model` and `Struct::Answer` / `Struct::Error` there.
+//! - `Struct::Budget` - the meter. That is `Struct::Budget` there, fed from the
+//!   answer the round trip already parsed.
+//!
+//! What stayed, because it is this game's and no other caller's: the corpus
+//! (`Templates/Observation.json`, `Templates/Questions.json` and the five lanes
+//! its `lanes` object declares), the rules ([`Fn::Decide`]), the gate
+//! ([`Fn::Gate`]), the page expressions, the car and scene readings, and the
+//! transport ([`Fn::Cloudflare`]: the token, curl and the status code, which the
+//! Lane crate reaches through its `Poster` seam and never implements itself).
 
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
@@ -41,14 +63,12 @@ pub mod Struct;
 
 pub use crate::{
 	Fn::{
-		Cloudflare::{Advice, Advise as AdviseCloudflare, Fail, Parse as ParseAdvice},
+		Cloudflare::{Account, Endpoint, Post, Token},
 		Decide::{BackTicks, Carry, Decide as DecideAction, TurnOutTicks},
 		Expressions::{Bootstrap, Cruise, Hold, Publish, Release, State},
 		Gate::Gate,
-		Send::{Compose as ComposeSend, Send},
 	},
 	Struct::{
-		Budget::Budget,
 		Decision::{Action, Decision, Keys},
 		Driver::Driver,
 		Mode::Mode,
