@@ -382,13 +382,18 @@ function drawWire(Send, Recv, Wire) {
   } catch (e) { Answers = null }
   const Pool = D.pool;
 
-  // STATE - a row per field, keyed by name and never rebuilt.
+  // STATE - a row per field, keyed by name and never rebuilt. The placeholder
+  // is a node of its own rather than a cleared body: clearing the body would
+  // detach every pooled row, and a pool whose nodes are out of the document is
+  // a pool that can never put them back.
   const State = (Body && Body.state) || {};
   const Fields = Object.keys(State);
   if (D.cache.__stateEmpty !== !Fields.length) {
     D.cache.__stateEmpty = !Fields.length;
-    stateBox.Body.textContent = '';
-    if (!Fields.length) { const N = S(document.createElement('div'), DIM); N.textContent = NOTHING; stateBox.Body.appendChild(N) }
+    if (!Fields.length) {
+      if (!Pool.stateBlank) { Pool.stateBlank = S(document.createElement('div'), DIM); Pool.stateBlank.textContent = NOTHING }
+      stateBox.Body.appendChild(Pool.stateBlank);
+    } else if (Pool.stateBlank) { Pool.stateBlank.remove() }
   }
   for (const F of Fields) {
     let R = Pool.rows[F];
@@ -398,9 +403,11 @@ function drawWire(Send, Recv, Wire) {
       const V = S(document.createElement('span'), 'color:#9fe8ff;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:210px');
       V.id = 'hw-v-' + F;
       Row.appendChild(K); Row.appendChild(V);
-      stateBox.Body.appendChild(Row);
       R = Pool.rows[F] = { Row, V };
     }
+    // Re-attach when the node exists but is not in the document: that is what
+    // makes a field that disappears and returns a reused node, not a new one.
+    if (R.Row.parentNode !== stateBox.Body) stateBox.Body.appendChild(R.Row);
     set(R.V, typeof State[F] === 'string' ? State[F] : JSON.stringify(State[F]));
   }
 
