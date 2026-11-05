@@ -97,6 +97,24 @@
 			"address": "0x0089e7a0",
 			"note": "4000 free roam, 4701.. URL races"
 		},
+		"traffic": {
+			"type": "array",
+			"source": "memory",
+			"address": "World (0x00890080) +0, walked as a list",
+			"note": "every car in the world: the node is the car, next at +0, and each carries its driver type at +0x24 (1 the player, 3 an AI racer, 4 traffic, 0 a friend). Read relative to our own car: distance, metres ahead along our travel, metres to the right, their speed, and the closing speed along the line of sight. Documentation/Memory.md has the walk and the struct."
+		},
+		"flow": {
+			"type": "integer",
+			"source": "memory",
+			"address": "0x008654a4",
+			"note": "GameFlowManager state: 3 front end, 6 in the world"
+		},
+		"career_race": {
+			"type": "integer",
+			"source": "memory",
+			"address": "0x00863470",
+			"note": "the career race being run; 0 is free roam"
+		},
 		"route_cue_x": {
 			"type": "number",
 			"source": "frame",

@@ -217,6 +217,10 @@ impl Driver {
 			(Run.Tick, Decision, Scene, Manoeuvre)
 		};
 
+		// Which question the model was asked, so the trace can say what its
+		// answer was an answer to: the same word means different things at a
+		// wall and on a clear road.
+		let mut Asked:&'static str = "-";
 		if let Some(Name) = &Policy.Model
 			&& Tick % Policy.Every == 0
 		{
@@ -227,6 +231,7 @@ impl Driver {
 				match AdviseCloudflare(&Car, &Scene, Policy.Cue, Name) {
 					Ok(Advice) => {
 						Meter.Charge(Advice.Input, Advice.Output);
+						Asked = Advice.Asked;
 						Decision = Gate::New(Policy.Threshold).Apply(Decision, &Advice, &Car, &Scene, Manoeuvre, Policy.TargetKmh);
 					},
 					Err(Why) => Meter.Miss(Why.Why()),
@@ -272,8 +277,12 @@ impl Driver {
 				"moved_m": Scene.Moved,
 				"turned_degrees": Scene.Turned,
 				"blocked_ticks": Scene.Blocked,
+				"lead_m": Scene.Lead.as_ref().map(|One| One.Distance),
+				"lead_kmh": Scene.Lead.as_ref().map(|One| One.Kmh),
+				"lead_closing_kmh": Scene.Lead.as_ref().map(|One| One.Closing),
 				"sentence": Scene.Sentence
 			},
+			"asked": Asked,
 			"decision": {
 				"action": Decision.Action.Name(),
 				"ms": (Decision.Duty * 100.0).round(),

@@ -65,6 +65,11 @@ pub struct Advice {
 	pub Input:u64,
 	/// Output tokens the reply reported.
 	pub Output:u64,
+	/// Which question was asked, so a trace can say what the answer was to.
+	///
+	/// The same word means different things at a wall and on a clear road, and
+	/// a log that records only the word cannot tell them apart afterwards.
+	pub Asked:&'static str,
 }
 
 /// Why no advice arrived.
@@ -146,7 +151,7 @@ pub fn Parse(Body:&str) -> Result<Advice, Fail> {
 		.as_u64()
 		.or_else(|| Parsed["usage"]["output_tokens"].as_u64())
 		.unwrap_or(0);
-	Ok(Advice { Model, Action, Probability, Confidence, Input, Output })
+	Ok(Advice { Model, Action, Probability, Confidence, Input, Output, Asked:"parse" })
 }
 
 /// Ask a model what it would do. `Err` on any failure.
@@ -175,13 +180,23 @@ pub fn Advise(Car:&Car, Scene:&Situation, Cue:Option<f64>, Name:&str) -> Result<
 		"moved_m": Scene.Moved,
 		"turned_degrees": Scene.Turned,
 		"blocked_ticks": Scene.Blocked,
+		// The car ahead, when the world's list has one: the gap, its speed and
+		// the rate the gap is changing, all read from the game's own struct.
+		"lead_m": Scene.Lead.as_ref().map(|One| One.Distance.round()),
+		"lead_kmh": Scene.Lead.as_ref().map(|One| One.Kmh.round()),
+		"lead_closing_kmh": Scene.Lead.as_ref().map(|One| One.Closing.round()),
+		"lead_in_lane": Scene.Lead.as_ref().map(|One| One.Front() && One.InPath()),
+		"lead_kind": Scene.Lead.as_ref().map(|One| One.Kind()),
 	});
+	let (Asked, Questions) = Questions(Scene);
 	let Body = json!({
 		"model": Bare,
 		"state": State,
-		"questions": Questions(Scene),
+		"questions": Questions,
 	});
-	Parse(&Ask(&URL, &Body.to_string(), &Token)?)
+	let mut Answer = Parse(&Ask(&URL, &Body.to_string(), &Token)?)?;
+	Answer.Asked = Asked;
+	Ok(Answer)
 }
 
 /// The questions this tick asks, which the scene decides.
@@ -192,9 +207,11 @@ pub fn Advise(Car:&Car, Scene:&Situation, Cue:Option<f64>, Name:&str) -> Result<
 /// undo progress the car has already made. Every option is one the gate can
 /// perform - an option the driver has no key for is a question that cannot be
 /// answered, however well the model understands it.
-fn Questions(Scene:&Situation) -> Value {
+fn Questions(Scene:&Situation) -> (&'static str, Value) {
 	if Scene.Jammed() {
-		return json!({
+		return (
+			"blocked",
+			json!({
 			"action": {
 				"type": "choice",
 				"instructions": "The car cannot make progress where it is pointing: the situation field says what it is against, and moved_m is how far it has actually travelled while the throttle was held. Reversing with the wheel turned is how a car leaves a wall; pushing forward again only presses it back into what it hit. Which way should the car go?",
@@ -212,9 +229,43 @@ fn Questions(Scene:&Situation) -> Value {
 				"instructions": "How sure are you of that way out?",
 				"criteria": ["guessing", "unsure", "fairly sure", "certain"]
 			}
-		});
+			}),
+		);
 	}
-	json!({
+	// A car close ahead in our lane. Ghost mode means it cannot be hit, so this
+	// is not a hazard question - it is a question about the road, and the
+	// numbers are real: the gap in metres, the other car's speed, and the rate
+	// the gap is changing.
+	if let Some(One) = &Scene.Lead
+		&& One.Front()
+		&& One.InPath()
+		&& One.Distance < 60.0
+	{
+		return (
+			"traffic",
+			json!({
+				"action": {
+					"type": "choice",
+					"instructions": "Another car is ahead in your lane: lead_m is the distance to it, lead_kmh its speed, lead_closing_kmh the rate the gap is changing (positive is closing, negative is pulling away), and lead_kind what the game calls it. Ghost mode is on, so contact cannot happen - this is a question about the line and the pace, not about survival. What should the driver do?",
+					"criteria": {
+						"throttle": "Hold the pace and follow it",
+						"brake": "Drop back and give it room",
+						"hold": "Lift off and let the gap settle",
+						"steer_left": "Move to the left of it",
+						"steer_right": "Move to the right of it"
+					}
+				},
+				"confidence": {
+					"type": "score",
+					"instructions": "How sure are you of that?",
+					"criteria": ["guessing", "unsure", "fairly sure", "certain"]
+				}
+			}),
+		);
+	}
+	(
+		"open",
+		json!({
 		"action": {
 			"type": "choice",
 			"instructions": "The car is moving on a city road in free roam, with ghost mode on so other cars cannot be hit. route_cue_x is the route arrow's screen position when one is visible - 0.0 far left, 0.5 dead ahead, 1.0 far right - and null when there is no arrow. What should the driver do next?",
@@ -231,7 +282,8 @@ fn Questions(Scene:&Situation) -> Value {
 			"instructions": "How sure are you of that action?",
 			"criteria": ["guessing", "unsure", "fairly sure", "certain"]
 		}
-	})
+		}),
+	)
 }
 
 /// One POST, with the token on stdin.

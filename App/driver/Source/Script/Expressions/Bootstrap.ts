@@ -24,18 +24,71 @@
 			const Car = Player ? u32(Player + 4) : 0;
 			if (!Car) return { car: 0 };
 			const Speed = f32(Car + 0x430);
+			const Pos = [
+				+f32(Car + 0x60).toFixed(1),
+				+f32(Car + 0x64).toFixed(1),
+				+f32(Car + 0x68).toFixed(1),
+			];
+			// The world's car list, walked the way the port's own probe walks
+			// it (`runtime/roam.c` log_cars): World +0 is the head node, the
+			// node *is* the car's first two dwords, and the next is at +0.
+			// Each car carries its driver type at +0x24 - 1 the player, 3 an
+			// AI racer, 4 traffic, 0 a friend - so the traffic ahead is a
+			// measured fact, not a guess from pixels.
+			const World = u32(0x00890080);
+			const Vel = [f32(Car + 0x70), f32(Car + 0x74)];
+			const Reach = Math.hypot(Vel[0], Vel[1]) || 1;
+			const Text = (At) => {
+				let Out = "";
+				for (let I = 0; I < 24; I++) {
+					const C = dv.getUint8(At + I);
+					if (C < 32 || C > 126) break;
+					Out += String.fromCharCode(C);
+				}
+				return Out;
+			};
+			const Traffic = [];
+			if (World) {
+				let Node = u32(World);
+				for (let K = 0; Node && Node !== World && K < 64; K++) {
+					const Their = [f32(Node + 0x70), f32(Node + 0x74)];
+					const Dx = f32(Node + 0x60) - Pos[0];
+					const Dy = f32(Node + 0x64) - Pos[1];
+					const Dz = f32(Node + 0x68) - Pos[2];
+					const Distance = Math.hypot(Dx, Dy, Dz);
+					if (Node !== Car && Distance > 0.5 && Distance <= 150) {
+						Traffic.push({
+							drv: u32(Node + 0x24),
+							name: Text(u32(Node + 0x0c)),
+							d: +Distance.toFixed(1),
+							ahead: +((Dx * Vel[0] + Dy * Vel[1]) / Reach).toFixed(1),
+							right: +((Dx * Vel[1] - Dy * Vel[0]) / Reach).toFixed(1),
+							kmh: Math.round(Math.hypot(Their[0], Their[1]) * 3.6),
+							closing: +(
+								(-((Their[0] - Vel[0]) * Dx + (Their[1] - Vel[1]) * Dy) /
+									Distance) *
+								3.6
+							).toFixed(0),
+						});
+					}
+					Node = u32(Node);
+				}
+			}
+			Traffic.sort((A, B) => A.d - B.d);
 			return {
 				car: Car,
-				pos: [
-					+f32(Car + 0x60).toFixed(1),
-					+f32(Car + 0x64).toFixed(1),
-					+f32(Car + 0x68).toFixed(1),
-				],
+				pos: Pos,
 				heading: +((u16(Car + 0x40c) / 65536) * 360).toFixed(1),
 				speed: +Speed.toFixed(2),
 				kmh: Math.round(Math.abs(Speed) * 3.6),
 				rpm: Math.round(f32(Car + 0x440)),
 				gear: dv.getInt8(Car + 0x434),
+				// 6 is in game, and a zero career race means free roam rather
+				// than a race: both are the game's own words, not ours.
+				flow: u32(0x008654a4),
+				career_race: u32(0x00863470),
+				track: u32(0x0089e7a0),
+				traffic: Traffic.slice(0, 6),
 			};
 		},
 		hold(Key, On) {

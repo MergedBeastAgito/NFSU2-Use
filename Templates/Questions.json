@@ -133,6 +133,27 @@
 				}
 			}
 		},
+		"traffic.follow": {
+			"when": "a car in our lane, ahead, within 60 m",
+			"questions": {
+				"action": {
+					"type": "choice",
+					"instructions": "Another car is ahead in your lane: lead_m is the distance to it, lead_kmh its speed, and lead_closing_kmh the rate the gap is changing (positive is closing, negative is pulling away). Ghost mode is on, so contact cannot happen - the car ahead is information about the road and the pace, not a hazard. What should the driver do?",
+					"criteria": {
+						"throttle": "Hold the pace and follow it",
+						"brake": "Drop back and give it room",
+						"hold": "Lift off and let the gap settle",
+						"steer_left": "Move to the left of it",
+						"steer_right": "Move to the right of it"
+					}
+				},
+				"confidence": {
+					"type": "score",
+					"instructions": "How sure are you of that?",
+					"criteria": ["guessing", "unsure", "fairly sure", "certain"]
+				}
+			}
+		},
 		"recovery.blocked": {
 			"when": "verdict is blocked or stalled, or the rules are mid-manoeuvre",
 			"questions": {

@@ -23,6 +23,7 @@ fn Said(Word:&str, Probability:f64, Confidence:f64) -> Advice {
 		Confidence,
 		Input:358,
 		Output:0,
+		Asked:"test",
 	}
 }
 
@@ -52,6 +53,7 @@ fn Jammed() -> Situation {
 		Turned:0.0,
 		Blocked:Insist,
 		Stalled:0,
+		Lead:None,
 	}
 }
 

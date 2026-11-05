@@ -71,8 +71,20 @@ fn Show(Answer:&serde_json::Value) -> String {
 	// driving.
 	let Scene = &Answer["scene"];
 	let Field = |Value:&serde_json::Value| Value.as_f64().unwrap_or(0.0);
+	// The car ahead, when the traffic list has one: the number a following
+	// decision is made on, printed beside the speed that made it necessary.
+	let Lead = match Scene["lead_m"].as_f64() {
+		Some(Distance) => format!(" · lead {Distance:.0} m"),
+		None => String::new(),
+	};
+	// The question the answer was to: "throttle" at a wall and "throttle" on an
+	// empty road are different answers, and only the trace can tell them apart.
+	let Ask = match Answer["asked"].as_str() {
+		Some(Word) if Word != "-" => format!(" · asked {Word}"),
+		_ => String::new(),
+	};
 	format!(
-		"{:4} {:>11} {:>3} km/h gear {} · {:<8} {:>4.1} m · {} · {:.0},{:.0},{:.0}",
+		"{:4} {:>11} {:>3} km/h gear {} · {:<8} {:>4.1} m · {} · {:.0},{:.0},{:.0}{Lead}{Ask}",
 		Answer["tick"].as_u64().unwrap_or(0),
 		Decision["action"].as_str().unwrap_or("-"),
 		Field(&Car["kmh"]).round(),

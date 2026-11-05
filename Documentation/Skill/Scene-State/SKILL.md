@@ -97,6 +97,56 @@ without leaving.
 
 ---
 
+## Read the port's own source before scanning its memory
+
+The port ships its probes: `runtime/roam.c` walks the world's cars, names the
+globals, and prints the rows this skill describes (`roam cars`). A pointer
+table found by pattern-matching floats is a guess that survives until the game
+changes; a global named in the source is a fact. When an address here disagrees
+with the source, the source is right.
+
+The map that matters, and what it buys:
+
+```
+G_WORLD   0x00890080  World*: +0 the car list head, +0x10 count
+G_FLOW    0x008654a4  GameFlowManager: 3 front end, 6 in the world
+G_TRACK   0x0089e7a0  the track: 4000 is the free-roam city
+car +0x24            driver type: 1 the player, 3 an AI racer, 4 traffic
+car +0x0c            the car type info; +0 of it is the name
+```
+
+`Documentation/Memory.md` holds the full table and the walk. Two consequences
+for a question:
+
+- **Traffic is measured, not inferred.** Every car in the world is in one list,
+  and each entry is the same struct the player drives, so "a car 23 m ahead,
+  closing at 14 km/h" is a read rather than a guess from a frame.
+- **The game says what a car is.** `+0x24` separates traffic from an AI racer
+  from a friend's car; a model told which one it is has something to reason
+  with that speed and position cannot give it.
+
+---
+
+## The instructions do the work, not the numbers
+
+A measured finding worth keeping: with the traffic question and its numbers in
+place, `clef-flash` answered `throttle` on 37 of 44 calls made with a car under
+60 m ahead - and it was right to. The question said ghost mode was on, so the
+car ahead could not be hit. The instruction told the model the traffic was not
+a hazard, and the model believed it.
+
+So a following question has to ask about **pace and road position**, not about
+safety, or it is asking a question whose answer is already in the instructions.
+What a question should carry:
+
+- the gap, the other car's speed, and the rate the gap is changing;
+- whether it is in our lane (`|right| <= 1 + ahead * 0.25` is roughly a lane);
+- what the car is (traffic, an AI racer, a friend) and what type;
+- and a stated consequence that is true - ghost mode means contact cannot
+  happen, so the decision is about the line and the pace.
+
+---
+
 ## Claim → test
 
 | claim | how it is checked |
@@ -106,3 +156,6 @@ without leaving.
 | a reverse is held, not tapped | an obeyed reverse sets the manoeuvre counter; the held ticks keep the side |
 | a manoeuvre ends in a turn | the last backing tick sets the turn, on the side the reverse used, with the throttle on |
 | the model may pick the side | a jammed scene plus `reverse_right` above the gate obeys and holds the right |
+| the car list is the game's, not a scan | the walk starts at `World (0x00890080) +0` and ends when the node is the world again; `runtime/roam.c` `log_cars` is the reference |
+| traffic is a read, not a guess | a car 20 m ahead appears with its own speed and closing rate in the same tick, without a frame |
+| the question changes with the scene | the trace's `asked` field is `blocked` at a wall, `traffic` behind a car in lane, `open` otherwise |

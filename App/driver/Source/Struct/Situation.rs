@@ -13,7 +13,7 @@
 //! answers as if the road were empty: it says `throttle` at a wall, and it is
 //! not wrong to, given what it was shown.
 
-use crate::Struct::State::Car;
+use crate::Struct::State::{Car, Lead};
 
 /// How many ticks one measurement window spans.
 ///
@@ -50,6 +50,8 @@ pub struct Situation {
 	pub Blocked:u32,
 	/// Ticks in a row under two km/h.
 	pub Stalled:u32,
+	/// The car most worth answering about, when the road has one.
+	pub Lead:Option<Lead>,
 }
 
 impl Situation {
@@ -65,6 +67,7 @@ impl Situation {
 			Turned:0.0,
 			Blocked:0,
 			Stalled:0,
+			Lead:None,
 		}
 	}
 
@@ -154,11 +157,21 @@ impl Witness {
 			Turned:Round(self.LastTurned),
 			Blocked:self.Blocked,
 			Stalled:self.Stalled,
+			Lead:Car.Lead(),
 		}
 	}
 
 	/// The scene in words, for a reader with no access to the memory map.
+	///
+	/// Two halves, because they answer different questions: what the car is
+	/// doing, and what is in front of it. A model told only the first drives
+	/// into the second.
 	fn Sentence(&self, Word:&str, Car:&Car) -> String {
+		format!("{}{}", self.Motion(Word, Car), Traffic(Car))
+	}
+
+	/// What the car itself is doing.
+	fn Motion(&self, Word:&str, Car:&Car) -> String {
 		let Turn = if self.LastTurned < 1.0 {
 			"with its heading unchanged".to_string()
 		} else {
@@ -208,3 +221,39 @@ fn Turn(From:f64, To:f64) -> f64 {
 
 /// One decimal, because a trace is read by a person.
 fn Round(Value:f64) -> f64 { (Value * 10.0).round() / 10.0 }
+
+/// What is in front of the car, in words.
+///
+/// The traffic list is the game's own array of cars, so this is not a guess
+/// from a frame: the distance, the lane and the closing speed are measured
+/// values, read from the same struct the player's car uses.
+fn Traffic(Car:&Car) -> String {
+	match Car.Lead() {
+		None => " The road ahead is clear for at least 150 m.".to_string(),
+		Some(One) if !One.Front() => {
+			format!(" The nearest car is {:.0} m behind, at {:.0} km/h.", One.Distance, One.Kmh)
+		},
+		Some(One) => {
+			let Lane = if One.InPath() { "in our lane" } else { "in another lane" };
+			let Gap = if One.Closing > 3.0 {
+				format!(", closing at {:.0} km/h", One.Closing)
+			} else if One.Closing < -3.0 {
+				format!(", pulling away at {:.0} km/h", -One.Closing)
+			} else {
+				", the gap is steady".to_string()
+			};
+			// The game's own words for what the car is: its driver type and
+			// the name its type info carries. A model told "traffic" and
+			// "an AI racer" differently has something to reason about.
+			let What = if One.Name.is_empty() {
+				One.Kind().to_string()
+			} else {
+				format!("{} ({})", One.Kind(), One.Name)
+			};
+			format!(
+				" The nearest car is {:.0} m ahead, {Lane}, {What} doing {:.0} km/h{Gap}.",
+				One.Distance, One.Kmh
+			)
+		},
+	}
+}
