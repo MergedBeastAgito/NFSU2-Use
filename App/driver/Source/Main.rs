@@ -12,8 +12,15 @@
 //! that spends money should say how much it may spend before it starts:
 //! `--threshold` is how sure the model must be before its answer replaces the
 //! rules, and `--every` is how often it is asked at all. The run's own ceiling -
-//! requests and tokens - is the lane decider's meter (`agentic.lane.decide`),
-//! which is where the spend is counted now.
+//! requests and tokens - is `--max-requests` and `--max-tokens`, and it is the
+//! lane decider's meter (`agentic.lane.decide`), which is where the spend is
+//! counted now; the line it prints at exit is the invoice.
+//!
+//! The corpus is the other input a run cannot invent: `--corpus` names the
+//! directory holding `Observation.json` and `Questions.json`, and `NFSU2_CORPUS`
+//! names it when the flag is absent. A corpus that does not load is a warning and
+//! a rules-only run rather than a refusal to start, because the rules are the
+//! driver and the model is the advisor.
 
 // The house style is PascalCase everywhere - functions, fields, locals - so the
 // lint that disagrees with it is off here as it is in `Source/Library.rs`. The
@@ -24,7 +31,8 @@
 
 use std::{sync::Arc, time::Duration};
 
-use AgenticNfsuDriver::{Driver, Policy};
+use AgenticLane::{Budget, Decide as DecidePort, Decider};
+use AgenticNfsuDriver::{Driver, OpenCorpus, Policy, Priority};
 use AgenticSdk::{Adapter, Browse, Call, Chrome, ChromeOptions, Clock, Create, Never, OpenOptions, Options, Tokio};
 
 /// One argument's value.
@@ -146,6 +154,44 @@ async fn main() -> Result<(), String> {
 		Every:Number("--every", 10u32).max(1),
 		Threshold:Number("--threshold", 0.6),
 	};
+	// The model, when a model was named. A corpus that does not load is a
+	// warning rather than a failure: the rules already drive the car, and a run
+	// that refused to start because a data file was missing would be a worse
+	// outcome than a run that says so and drives.
+	//
+	// The ceiling is the run's own - requests and tokens - and it lives in the
+	// decider's meter from here on. Nothing in this file counts requests: two
+	// authorities over one invoice is how a spend report starts to lie.
+	let Model:Option<Arc<Decider>> = match &Policy.Model {
+		Some(Name) => match OpenCorpus(Name, Budget::New(Number("--max-requests", 0u32), Number("--max-tokens", 0u64)), Arg("--corpus").as_deref()) {
+			Ok(Decider) => {
+				let Corpus = Decider.Corpus();
+				println!(
+					"corpus {} · {} lanes · {} templates · priority {}",
+					Corpus.Root().map(|Root| Root.display().to_string()).unwrap_or_else(|| "-".to_string()),
+					Corpus.Lanes().count(),
+					Corpus.Templates().count(),
+					Priority().Names().join(" > ")
+				);
+				Some(Decider)
+			},
+			Err(Why) => {
+				println!("corpus · {Why} · the rules drive this run");
+				None
+			},
+		},
+		None => None,
+	};
+	// The port the adapter holds, as the port and not the value: the driver has
+	// no business knowing which corpus this is.
+	let Port:Option<Arc<dyn DecidePort>> = match &Model {
+		Some(Decider) => {
+			let Port:Arc<dyn DecidePort> = Arc::clone(Decider);
+			Some(Port)
+		},
+		None => None,
+	};
+
 	let Bounded = Call::Within(Duration::from_secs(30), &Tokio, Arc::new(Never));
 	// The clock the release is measured against, kept apart from the pace the
 	// launcher needs: `Dispose` takes no call of its own, so the adapter builds
@@ -178,6 +224,7 @@ async fn main() -> Result<(), String> {
 		Policy.clone(),
 		Duration::from_secs(10),
 		Clock,
+		Port,
 	));
 	let Request = Policy.Text();
 
@@ -192,5 +239,11 @@ async fn main() -> Result<(), String> {
 	};
 
 	Held.Dispose().await;
+	// The invoice, printed on both paths out of the run - a ceiling reached, an
+	// interrupt and a failure all end with what the run cost. A run that asked
+	// nothing prints a meter of zero, which is the honest answer for it.
+	if let Some(Decider) = &Model {
+		println!("{}", Decider.Budget().Line());
+	}
 	Outcome
 }

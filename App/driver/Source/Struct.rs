@@ -3,7 +3,6 @@
 
 pub mod Decision;
 pub mod Driver;
-pub mod Mode;
 pub mod Policy;
 pub mod Situation;
 pub mod State;

@@ -112,6 +112,11 @@ pub fn Post(URL:&str, Body:&str, Token:&str) -> Result<String, String> {
 	if let Some(mut In) = Child.stdin.take() {
 		// A failed write is curl reading no header, which is the same failure a
 		// missing token has: the call is answered 401 and the rules carry on.
+		//
+		// The token is interpolated here and nowhere else: the format string is
+		// the one place it becomes bytes, and a literal written in its place -
+		// which is what this line once held - sends `Bearer ***` to the endpoint
+		// and answers 401 on every tick while looking like a credential problem.
 		let _ = In.write_all(format!("header = \"Authorization: Bearer {Token}\"\n").as_bytes());
 	}
 	let Output = Child.wait_with_output().map_err(|_| "curl unavailable".to_string())?;

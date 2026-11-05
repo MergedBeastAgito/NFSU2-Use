@@ -48,12 +48,15 @@ use AgenticSdk::{
 	Port::Adapter::Error as AdapterError,
 	Target,
 };
+use AgenticLane::Decide as DecidePort;
 use serde_json::{Value, json};
 
 use crate::{
 	Fn::{
+		Consult::{Consult, Consulted},
 		Decide::{BackTicks, Carry, Decide as DecideAction},
 		Expressions,
+		Observe::Observe,
 	},
 	Struct::{Policy::Policy, Situation::Witness, State::Car},
 };
@@ -114,6 +117,14 @@ pub struct Driver {
 	ReleaseSpan:Duration,
 	/// The clock a release's deadline is measured against.
 	Clock:Arc<dyn Clock>,
+	/// The model, as the port that hides it, or `None` for a rules-only run.
+	///
+	/// The port rather than the corpus: selecting a lane, composing the body,
+	/// reading the reply and metering the spend are `agentic.lane.decide`'s, and
+	/// this adapter is a caller of them. Holding the trait object is also what
+	/// lets a test drive the tick from an answer it wrote, with no corpus and no
+	/// socket.
+	Decider:Option<Arc<dyn DecidePort>>,
 	/// The counters the rules carry between ticks.
 	Run:Mutex<Run>,
 	/// Whether the page-side driver has been installed on this page.
@@ -124,12 +135,18 @@ pub struct Driver {
 
 impl Driver {
 	/// An adapter over an open page, with the policy it starts from.
+	///
+	/// The decider is an argument rather than something built here: which corpus
+	/// and which transport are the composition root's decisions, and an adapter
+	/// that loaded its own corpus would be an adapter a test could not drive
+	/// without files on disk.
 	pub fn New(
 		Browser:Arc<dyn Browse>,
 		Page:Target,
 		Policy:Policy,
 		ReleaseSpan:Duration,
 		Clock:Arc<dyn Clock>,
+		Decider:Option<Arc<dyn DecidePort>>,
 	) -> Self {
 		Self {
 			Browser,
@@ -137,6 +154,7 @@ impl Driver {
 			Policy,
 			ReleaseSpan,
 			Clock,
+			Decider,
 			Run:Mutex::new(Run::default()),
 			Bootstrapped:AtomicBool::new(false),
 			Disposed:AtomicBool::new(false),
@@ -177,7 +195,7 @@ impl Driver {
 		// The counters are read and written in one scope, before any await: a
 		// guard held across one would make the future `!Send` and the port
 		// unusable from a spawned task.
-		let (Tick, Decision, Scene, Manoeuvre) = {
+		let (Tick, mut Decision, Scene, Manoeuvre, Reading) = {
 			let mut Guard = Lock(&self.Run);
 			// One reborrow of the whole struct: two field borrows through the
 			// guard itself would be two mutable borrows of the guard.
@@ -193,8 +211,45 @@ impl Driver {
 			// opinion that arrives halfway through an escape would drive the
 			// car back into the thing it is leaving.
 			let Manoeuvre = Run.Carry.Back > 0 || Run.Carry.Turning > 0;
-			(Run.Tick, Decision, Scene, Manoeuvre)
+			// The tick as the corpus names its fields, built before the guard is
+			// dropped: it reads nothing but the two values above, and building
+			// it here keeps the whole reading in one scope rather than half of
+			// it outside.
+			let Reading = Observe(&Car, &Scene, Policy.Cue);
+			(Run.Tick, Decision, Scene, Manoeuvre, Reading)
 		};
+
+		// The model, when the policy says to ask it. The rules have already
+		// decided this tick, so every way a consultation can end without an
+		// answer leaves a car that is still driving and a trace that says why.
+		//
+		// The cadence is the policy's: `Every` is how many ticks pass between
+		// asks, and the tick number starts at one, so a run asks on its tenth
+		// tick and not on its first. That ordering is the old one and it is
+		// deliberate - the first tick has no window behind it, and a model
+		// handed a car it has never seen is being asked to guess.
+		let mut Consulted = Consulted::None();
+		if let Some(Decider) = &self.Decider
+			&& Policy.Model.is_some()
+			&& Tick % Policy.Every == 0
+		{
+			Consulted = Consult(&**Decider, &Reading, Bounded.clone()).await;
+			// An answer that carried no `action` question is not a decision: the
+			// gate keeps the rules and the overlay still shows what came back.
+			if let Some(Advice) = &Consulted.Advice {
+				Decision = Gate::New(Policy.Threshold).Apply(
+					Decision,
+					&Advice.Model,
+					&Advice.Word,
+					Advice.Probability,
+					Advice.Confidence,
+					&Car,
+					&Scene,
+					Manoeuvre,
+					Policy.TargetKmh,
+				);
+			}
+		}
 
 		// An obeyed reverse is a manoeuvre, not a tick. The model picked the
 		// side and the rules hold it for the same handful of ticks a stall
@@ -249,8 +304,14 @@ impl Driver {
 				"lead_closing_kmh": Scene.Lead.as_ref().map(|One| One.Closing),
 				"sentence": Scene.Sentence
 			},
-			"asked": "-",
-			"mode": crate::Struct::Mode::Mode::Of(&Car, &Scene, Policy.Cue).Name(),
+			// Which lane the priority chose, which question it asked, and what
+			// came back. Three keys because they are three facts: a lane is a
+			// request shape, a template is a question, and an answer is what the
+			// model said about it. `asked` is `-` whenever no answer came back,
+			// so a trace never shows a question for an answer it does not have.
+			"lane": Consulted.Lane,
+			"asked": Consulted.Asked,
+			"modelAdvice": Consulted.View,
 			"decision": {
 				"action": Decision.Action.Name(),
 				"ms": (Decision.Duty * 100.0).round(),

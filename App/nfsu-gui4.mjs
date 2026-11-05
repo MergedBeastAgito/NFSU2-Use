@@ -5,6 +5,7 @@
 //   top-right     OBSERVATIONS (what memory reports) + CUES (what pixels report)
 //   bottom-left   DECISIONS (the candidate actions the policy weighed, with the
 //                 chosen one highlighted; the mode buttons live here too)
+//   bottom-right  WIRE (the last request and reply bodies, redacted)
 //
 // Still inline styles only (this page's CSP blocks <style>), still built once,
 // still cached writes on a 250 ms timer, still click-through except buttons.
@@ -50,7 +51,7 @@ const ev = async (x) => {
 
 if (FLAG === "--off") {
 	const removed = await ev(
-		`(()=>{let n=0;for(const id of ['hermes-hud','hermes-obs','hermes-dec']){const el=document.getElementById(id);if(el){el.remove();n++}}window.__hermesDebug=null;return n})()`,
+		`(()=>{let n=0;for(const id of ['hermes-hud','hermes-obs','hermes-dec','hermes-wire']){const el=document.getElementById(id);if(el){el.remove();n++}}window.__hermesDebug=null;return n})()`,
 	);
 	console.log(JSON.stringify({ removed }));
 	ws.close();
@@ -58,7 +59,7 @@ if (FLAG === "--off") {
 }
 
 const INSTALL = `(()=>{
-for (const id of ['hermes-hud','hermes-obs','hermes-dec','hermes-panel','hermes-conf','hermes-style']) { const e = document.getElementById(id); if (e) e.remove() }
+for (const id of ['hermes-hud','hermes-obs','hermes-dec','hermes-wire','hermes-panel','hermes-conf','hermes-style']) { const e = document.getElementById(id); if (e) e.remove() }
 const D = window.__hermesDebug = window.__hermesDebug || {};
 D.log = D.log || []; D.cache = {};
 window.__mode = window.__mode || D.mode || 'memory';
@@ -226,14 +227,36 @@ for (const k of KNOBS) {
 
 // One row per candidate action; the chosen one is highlighted, so the list reads
 // as "what it considered" rather than only "what it did".
+// DECISIONS reads as a table, not a list: four columns - the candidate, the
+// duty it would hold, the model's probability for it, the model's confidence -
+// with a pipe between every pair. A columnar readout lets the eye compare a
+// candidate's duty against its probability on one line; a list of rows makes
+// the reader hold one row at a time and compare from memory.
+//
+// The pipe rule sits directly under the DECISIONS title, which is what makes
+// the panel read as a header rule rather than a divider: five pipes for four
+// columns and the two edges. The same pipes appear inside every row, so the
+// columns line up down the panel instead of only at the top.
 const ACTIONS = ['steer left','steer right','centred','cruise','roam turn','reverse','unsupported'];
+const GRID = 'display:grid;grid-template-columns:1fr 7px 30px 7px 26px 7px 24px;gap:0 1px;align-items:baseline;padding:1px 3px;border-radius:3px';
+const PIPESTYLE = 'color:#3d566b';
+const rule = S(document.createElement('div'), 'color:#3d566b;letter-spacing:.42em;margin:3px 0 1px;padding-left:.42em;text-align:center');
+rule.id = 'hd-rule'; rule.textContent = '| | | | |';
+// Directly under the title, not at the bottom of the panel's controls.
+dec.insertBefore(rule, decHdr.nextSibling);
 const rows = {};
 for (const a of ACTIONS) {
-  const row = S(document.createElement('div'), 'display:flex;justify-content:space-between;gap:6px;padding:1px 4px;border-radius:3px;color:#8fb8cf');
-  const name = S(document.createElement('span'), ''); name.textContent = a;
-  const val = S(document.createElement('span'), 'color:#5f7d95'); val.textContent = '-';
-  row.appendChild(name); row.appendChild(val);
-  decBody.appendChild(row); rows[a] = {row, val};
+  const row = S(document.createElement('div'), GRID + ';color:#8fb8cf');
+  const slug = a.replace(/\s+/g, '-');
+  const name = S(document.createElement('span'), 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis');
+  name.textContent = a;
+  const mk = (col, width) => { const e = S(document.createElement('span'), 'color:#5f7d95;text-align:right'); e.id = 'hd-' + slug + '-' + col; e.textContent = '-'; return e };
+  const pipe = () => S(document.createElement('span'), PIPESTYLE + ';text-align:center');
+  const [p1, p2, p3] = [pipe(), pipe(), pipe()];
+  for (const p of [p1, p2, p3]) p.textContent = '|';
+  const ms = mk('ms'), prob = mk('p'), conf = mk('c');
+  row.append(name, p1, ms, p2, prob, p3, conf);
+  decBody.appendChild(row); rows[a] = {row, ms, prob, conf};
 }
 
 const set = (node, text) => { if (D.cache[node.id] !== text) { node.textContent = text; D.cache[node.id] = text } };
@@ -303,9 +326,10 @@ function paint() {
   for (const act of ACTIONS) {
     const chosen = (d.action || '') === act;
     const r = rows[act];
-    S(r.row, 'display:flex;justify-content:space-between;gap:6px;padding:1px 4px;border-radius:3px;' +
-      (chosen ? 'background:rgba(120,220,255,.18);color:#eaf7ff' : 'color:#8fb8cf'));
-    set(r.val, chosen ? (d.ms ? d.ms + 'ms' : 'now') : '-');
+    S(r.row, GRID + ';' + (chosen ? 'background:rgba(120,220,255,.18);color:#eaf7ff' : 'color:#8fb8cf'));
+    set(r.ms, chosen ? (d.ms ? d.ms + 'ms' : 'now') : '-');
+    set(r.prob, d.probability === undefined || d.probability === null ? '-' : (+d.probability).toFixed(2));
+    set(r.conf, d.confidence === undefined || d.confidence === null ? '-' : (+d.confidence).toFixed(1));
   }
   set(driving, 'driving: ' + D.mode + ' · ' + (car.kmh === undefined ? '?' : car.kmh) + ' km/h · ' +
     ((a.cx === null || a.cx === undefined) ? 'no cue' : 'cue ' + a.cx.toFixed(2)) + ' · ' + (d.action || '-'));

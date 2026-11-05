@@ -64,14 +64,17 @@ pub mod Struct;
 pub use crate::{
 	Fn::{
 		Cloudflare::{Account, Endpoint, Post, Token},
+		Consult::{Advice, Consult, Consulted},
+		Corpus::{Open as OpenCorpus, Priority, Root as CorpusRoot, Templates as TemplateRules},
 		Decide::{BackTicks, Carry, Decide as DecideAction, TurnOutTicks},
 		Expressions::{Bootstrap, Cruise, Hold, Publish, Release, State},
 		Gate::Gate,
+		Observe::Observe,
+		Poster::Http,
 	},
 	Struct::{
 		Decision::{Action, Decision, Keys},
 		Driver::Driver,
-		Mode::Mode,
 		Policy::Policy,
 		Situation::{Insist, Situation, Window, Witness},
 		State::{Car, Lead},
