@@ -37,7 +37,7 @@ App/                        the application: what runs
     Source/Library.rs       crate doc, modules, re-exports
     Source/Main.rs          the composition root: one adapter, one loop
     Source/Fn/              Decide, Cloudflare, Expressions, Gate
-    Source/Struct/          State, Decision, Budget, Policy, Driver
+    Source/Struct/          State, Decision, Policy, Driver, Mode, Situation
     Source/Script/Expressions  one .ts file per expression the page runs
     build.rs                compiles those scripts into OUT_DIR/Script
     module.json             the manifest Agentic's vocabulary already reads

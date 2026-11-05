@@ -25,58 +25,24 @@ sets the goal; the model accepts a state and returns a decision.
 
 ---
 
-## The state is composed of dimensions, not fields
+## What a tick sends is a lane from the corpus
 
 A flat object of twenty numbers is not more informative than five - it is
-harder to read and more expensive. The send is composed from blocks, and the
-mode chooses which blocks a tick carries.
+harder to read and more expensive. So a tick does not send everything it can
+read: it sends a **lane**, and a lane is a request _shape_ - the fields a
+question actually reads, plus the templates it serves.
 
-| dimension | carries | source |
-| --- | --- | --- |
-| `motion` | speed, gear, rpm, heading, verdict, metres moved, blocked ticks | car struct |
-| `traffic` | the lead's gap, speed, closing rate and kind, and how many cars are near | world list |
-| `route` | the route cue's screen x, track, racetype | frame + globals |
-| `race` | career race, flow, pace against the target | globals |
-| `wheel` | surface, slip, grounded | car struct |
+The lanes and the templates are data, not code: `Templates/Questions.json`
+declares five lanes (`drive`, `recover`, `corner`, `race`, `context`) and the
+typed question templates each of them serves, and
+`Templates/Observation.json` declares every field a lane may name.
+`Templates/README.md` is their reference, with the measured token counts behind
+the shapes.
 
-`motion` is in every send: without it there is nothing to decide about. The
-others are chosen, and the choice is the mode's.
-
----
-
-## The mode chooses the dimensions, and the tick rotates the rest
-
-| mode | when | always | every 4th tick |
-| --- | --- | --- | --- |
-| `cruise` | free roam, moving | motion + traffic | route |
-| `mission` | a route to a place | motion + route | traffic |
-| `race` | a race is running | motion + route + race | traffic |
-| `recover` | blocked or stalled | motion | traffic |
-
-Two rules make the send *different every time* without making it random:
-
-- **the rotation is by tick**, so a slow dimension arrives at a fixed cadence
-  rather than when a caller remembers it;
-- **the focus moves**: each send names the dimension it is asking about, so the
-  model is told what the tick is for instead of inferring it from a field list.
-
-What this is not: a fixed schema with unused fields. A `race` send does not
-carry the wheel block, and a `cruise` send does not carry `racetype` on every
-tick - the fields a question cannot read are fields that only cost tokens.
-
----
-
-## The question follows the mode
-
-| mode | question | options |
-| --- | --- | --- |
-| `cruise` | follow the road at a pace | throttle, hold, brake, steer left, steer right |
-| `mission` | which way the route goes | steer left, steer right, throttle, brake |
-| `race` | pace into the corner | throttle, brake, steer left, steer right |
-| `recover` | which way out | reverse left, reverse right, throttle, brake, steer left, steer right |
-
-Every option is one the gate can perform. An option the driver has no key for
-is a question that cannot be answered, however well the model understands it.
+Selecting the lane, composing `{model, state, questions}` from it and reading
+the reply are `agentic.lane.decide`'s - the Lane crate, which does that for any
+caller with a corpus. What stays here is the corpus itself, the rules that drive
+the car when the model is not asked, and the transport that posts the request.
 
 ---
 

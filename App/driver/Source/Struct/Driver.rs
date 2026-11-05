@@ -183,10 +183,10 @@ impl Driver {
 			// guard itself would be two mutable borrows of the guard.
 			let Run = &mut *Guard;
 			Run.Tick += 1;
-			// The scene is measured first, because the rules and the model are
-			// both answered by it: a car whose wheels are turning but which has
-			// not moved is a car against something, and neither the dashboard
-			// nor a single position read can say so.
+			// The scene is measured first, because the rules are answered by
+			// it: a car whose wheels are turning but which has not moved is a
+			// car against something, and neither the dashboard nor a single
+			// position read can say so.
 			let Scene = Run.Witness.Observe(&Car, Run.Throttle);
 			let Decision = DecideAction(&Car, &Scene, Policy.Cue, Policy.TargetKmh, &mut Run.Carry);
 			// Whether a manoeuvre is under way, which the gate needs: an
