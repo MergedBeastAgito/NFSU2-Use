@@ -114,12 +114,8 @@ pub struct Driver {
 	ReleaseSpan:Duration,
 	/// The clock a release's deadline is measured against.
 	Clock:Arc<dyn Clock>,
-	/// What this run has spent, and when to stop spending.
-	Budget:Mutex<Budget>,
 	/// The counters the rules carry between ticks.
 	Run:Mutex<Run>,
-	/// Whether the ceiling has already been reported, so a trace says it once.
-	Spent:AtomicBool,
 	/// Whether the page-side driver has been installed on this page.
 	Bootstrapped:AtomicBool,
 	/// Whether this adapter was released.
@@ -132,7 +128,6 @@ impl Driver {
 		Browser:Arc<dyn Browse>,
 		Page:Target,
 		Policy:Policy,
-		Budget:Budget,
 		ReleaseSpan:Duration,
 		Clock:Arc<dyn Clock>,
 	) -> Self {
@@ -142,20 +137,11 @@ impl Driver {
 			Policy,
 			ReleaseSpan,
 			Clock,
-			Budget:Mutex::new(Budget),
 			Run:Mutex::new(Run::default()),
-			Spent:AtomicBool::new(false),
 			Bootstrapped:AtomicBool::new(false),
 			Disposed:AtomicBool::new(false),
 		}
 	}
-
-	/// What the run has spent so far.
-	///
-	/// A copy rather than a borrow: the composition root prints this after the
-	/// adapter has been released, and a value that outlived its adapter is the
-	/// one thing an exit line can safely hold.
-	pub fn Meter(&self) -> Budget { Lock(&self.Budget).clone() }
 
 	/// Whether this adapter was released.
 	pub fn Disposed(&self) -> bool { self.Disposed.load(Ordering::SeqCst) }
@@ -191,7 +177,7 @@ impl Driver {
 		// The counters are read and written in one scope, before any await: a
 		// guard held across one would make the future `!Send` and the port
 		// unusable from a spawned task.
-		let (Tick, mut Decision, Scene, Manoeuvre) = {
+		let (Tick, Decision, Scene, Manoeuvre) = {
 			let mut Guard = Lock(&self.Run);
 			// One reborrow of the whole struct: two field borrows through the
 			// guard itself would be two mutable borrows of the guard.
@@ -209,37 +195,6 @@ impl Driver {
 			let Manoeuvre = Run.Carry.Back > 0 || Run.Carry.Turning > 0;
 			(Run.Tick, Decision, Scene, Manoeuvre)
 		};
-
-		// Which question the model was asked, so the trace can say what its
-		// answer was an answer to: the same word means different things at a
-		// wall and on a clear road.
-		let mut Asked:&'static str = "-";
-		if let Some(Name) = &Policy.Model
-			&& Tick % Policy.Every == 0
-		{
-			let mut Meter = Lock(&self.Budget);
-			if Meter.Allows() {
-				// A failed call is not a decision: the rules already made one,
-				// and the meter records why the model is not in it.
-				match AdviseCloudflare(&Car, &Scene, Policy.Cue, Tick, Name) {
-					Ok(Advice) => {
-						Meter.Charge(Advice.Input, Advice.Output);
-						Asked = Advice.Asked;
-						Decision = Gate::New(Policy.Threshold).Apply(Decision, &Advice, &Car, &Scene, Manoeuvre, Policy.TargetKmh);
-					},
-					Err(Why) => Meter.Miss(Why.Why()),
-				}
-			} else if !self.Spent.swap(true, Ordering::SeqCst) {
-				// Said once, when the ceiling is first reached, rather than on
-				// every tick after it: the fact does not change, and a trace
-				// that repeats it buries the decisions it is
-				// supposed to explain.
-				println!(
-					"budget · ceiling reached after {} requests · the rules drive the rest",
-					Meter.Requests
-				);
-			}
-		}
 
 		// An obeyed reverse is a manoeuvre, not a tick. The model picked the
 		// side and the rules hold it for the same handful of ticks a stall
@@ -294,7 +249,7 @@ impl Driver {
 				"lead_closing_kmh": Scene.Lead.as_ref().map(|One| One.Closing),
 				"sentence": Scene.Sentence
 			},
-			"asked": Asked,
+			"asked": "-",
 			"mode": crate::Struct::Mode::Mode::Of(&Car, &Scene, Policy.Cue).Name(),
 			"decision": {
 				"action": Decision.Action.Name(),

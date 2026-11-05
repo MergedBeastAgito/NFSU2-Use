@@ -8,11 +8,12 @@
 //! runtime name it imports comes from `agentic-sdk`, the workspace's facade,
 //! and nothing it names belongs to a second Agentic crate.
 //!
-//! Three things bound a run and all three are flags, because a run that spends
-//! money should say how much it may spend before it starts: `--threshold` is
-//! how sure the model must be before its answer replaces the rules,
-//! `--max-requests` and `--max-tokens` are the run's ceiling, and `--every` is
-//! how often it is asked at all.
+//! Two things bound what the model may change, and both are flags, because a run
+//! that spends money should say how much it may spend before it starts:
+//! `--threshold` is how sure the model must be before its answer replaces the
+//! rules, and `--every` is how often it is asked at all. The run's own ceiling -
+//! requests and tokens - is the lane decider's meter (`agentic.lane.decide`),
+//! which is where the spend is counted now.
 
 // The house style is PascalCase everywhere - functions, fields, locals - so the
 // lint that disagrees with it is off here as it is in `Source/Library.rs`. The
@@ -23,7 +24,7 @@
 
 use std::{sync::Arc, time::Duration};
 
-use AgenticNfsuDriver::{Budget, Driver, Policy};
+use AgenticNfsuDriver::{Driver, Policy};
 use AgenticSdk::{Adapter, Browse, Call, Chrome, ChromeOptions, Clock, Create, Never, OpenOptions, Options, Tokio};
 
 /// One argument's value.
@@ -168,23 +169,20 @@ async fn main() -> Result<(), String> {
 	);
 
 	// The one construction, and the one place the concrete driver is named. The
-	// budget is the run's meter, so the concrete handle is kept beside the port
-	// for the exit line - the port itself has no way to be asked what it spent,
-	// and a caller that needed one would be asking the wrong value.
-	let Concrete = Arc::new(Driver::New(
+	// spend is the lane decider's meter, not this value's: a driver that kept a
+	// second count of the same requests would be a second authority over the
+	// same invoice.
+	let Held:Arc<dyn Adapter> = Arc::new(Driver::New(
 		Browser,
 		Page,
 		Policy.clone(),
-		Budget::New(Number("--max-requests", 240u32), Number("--max-tokens", 200_000u64)),
 		Duration::from_secs(10),
 		Clock,
 	));
-	let Held:Arc<dyn Adapter> = Concrete.clone();
 	let Request = Policy.Text();
 
 	// The interrupt is a normal ending, not an error: a held throttle survives
-	// the process that set it, so the adapter is released on both paths and the
-	// budget is printed on both.
+	// the process that set it, so the adapter is released on both paths.
 	let Outcome = tokio::select! {
 		Outcome = Run(&Held, &Request, Ticks, Interval) => Outcome,
 		_ = tokio::signal::ctrl_c() => {
@@ -194,6 +192,5 @@ async fn main() -> Result<(), String> {
 	};
 
 	Held.Dispose().await;
-	println!("{}", Concrete.Meter().Line());
 	Outcome
 }

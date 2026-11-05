@@ -1,9 +1,14 @@
 //! Which conversation the tick is having.
 //!
-//! A mode is not a mood: it decides which dimensions the send carries and which
-//! question is asked, and it is read from the game rather than set by a caller
-//! wherever the game can answer. A car in a race is racing; a car pressed
-//! against a wall is recovering, whatever it was doing a second ago.
+//! A mode is not a mood: it is this driver's own name for the state of the game,
+//! read from the game rather than set by a caller wherever the game can answer.
+//! A car in a race is racing; a car pressed against a wall is recovering,
+//! whatever it was doing a second ago.
+//!
+//! It names the state and nothing else. What a tick *sends* is the corpus's
+//! business - a lane in `Templates/Questions.json` names the fields a question
+//! reads - so the mode is the priority the lanes are selected in, stated once in
+//! Rust, and the word the overlay shows.
 
 use crate::Struct::{Situation::Situation, State::Car};
 
@@ -47,30 +52,6 @@ impl Mode {
 			Mode::Mission => "mission",
 			Mode::Race => "race",
 			Mode::Recover => "recover",
-		}
-	}
-
-	/// The dimensions this mode always carries, besides `motion`.
-	pub const fn Always(self) -> &'static [&'static str] {
-		match self {
-			Mode::Cruise => &["traffic"],
-			Mode::Mission => &["route"],
-			Mode::Race => &["route", "race"],
-			Mode::Recover => &[],
-		}
-	}
-
-	/// The dimension this mode adds every fourth tick.
-	///
-	/// The rotation is by tick so a slow dimension arrives at a cadence rather
-	/// than when a caller remembers it, which is what makes two consecutive
-	/// sends differ without making them random.
-	pub const fn Rotating(self) -> &'static str {
-		match self {
-			Mode::Cruise => "route",
-			Mode::Mission => "traffic",
-			Mode::Race => "traffic",
-			Mode::Recover => "traffic",
 		}
 	}
 }

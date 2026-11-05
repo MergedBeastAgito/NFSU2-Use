@@ -20,7 +20,7 @@ use std::{
 	time::Duration,
 };
 
-use AgenticNfsuDriver::{Budget, Driver, Policy, State};
+use AgenticNfsuDriver::{Driver, Policy, State};
 use AgenticSdk::{
 	Adapter,
 	Browse,
@@ -146,7 +146,6 @@ fn held(Policy:Policy) -> (Arc<dyn Adapter>, Arc<Scripted>) {
 		Page.clone(),
 		Handle(),
 		Policy,
-		Budget::New(0, 0),
 		Duration::from_secs(1),
 		Arc::new(Tokio),
 	));
@@ -344,7 +343,6 @@ async fn the_release_is_still_answered_after_a_long_run() {
 		Page.clone(),
 		Handle(),
 		Policy::default(),
-		Budget::New(0, 0),
 		Duration::from_millis(1),
 		Arc::new(Tokio),
 	));

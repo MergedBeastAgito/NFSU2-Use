@@ -1,35 +1,39 @@
-//! What the gate, the parser and the meter promise.
+//! What the rules and the gate promise.
 //!
-//! No browser and no network: the interesting failures of a metered advisor are
+//! No browser and no network: the interesting failures of an advised driver are
 //! all in the arithmetic between an answer and a keypress, and those are the
-//! ones a live run cannot reproduce on demand.
+//! ones a live run cannot reproduce on demand. The reply itself is not read
+//! here - that parser is the Lane crate's, and its fixtures travel with it.
 
 #![allow(non_snake_case)]
 
 use AgenticNfsuDriver::{
-	Action, Advice, Budget, Car, Carry, ComposeSend, DecideAction, Decision, Fail, Gate, Insist,
-	Lead, Mode, ParseAdvice, Situation, TurnOutTicks, Window, Witness,
+	Action, Car, Carry, DecideAction, Decision, Gate, Insist, Lead, Situation, TurnOutTicks, Window,
+	Witness,
 };
 use serde_json::json;
+
+/// The model a test's answer comes from, so the gate's trace has a name in it.
+const MODEL:&str = "clef-flash";
 
 /// A car doing 42 km/h: under the 45 target, so the throttle is expected on.
 fn Driving() -> Car { Car { Address:1, Kmh:42.0, Gear:3, Heading:12.5, ..Car::default() } }
 
-/// One answer from the model.
-fn Said(Word:&str, Probability:f64, Confidence:f64) -> Advice {
-	Advice {
-		Model:"clef-flash".into(),
-		Action:Word.into(),
-		Probability,
-		Confidence,
-		Input:358,
-		Output:0,
-		Asked:"test",
-	}
-}
-
 /// What the rules decided, before the model was asked.
 fn Rules() -> Decision { Decision::Rule(Action::SteerLeft, true, 0.42, "cue 0.440".into()) }
+
+/// One answer put to the gate: the four values a gate reads, and the rest.
+fn Gated(
+	Rule:Decision,
+	Word:&str,
+	Probability:f64,
+	Confidence:f64,
+	Car:&Car,
+	Scene:&Situation,
+	Manoeuvre:bool,
+) -> Decision {
+	Gate::New(0.5).Apply(Rule, MODEL, Word, Probability, Confidence, Car, Scene, Manoeuvre, 45.0)
+}
 
 /// A car that is not moving: the state the stall rule exists for.
 fn Stuck() -> Car { Car { Address:1, Kmh:0.0, Gear:2, Heading:0.0, ..Car::default() } }
@@ -213,7 +217,7 @@ fn a_tick_holds_the_four_keys_the_page_is_sent() {
 
 #[test]
 fn gate_keeps_the_rules_below_the_threshold() {
-	let Decision = Gate::New(0.5).Apply(Rules(), &Said("steer_right", 0.49, 0.9), &Driving(), &Clear(), false, 45.0);
+	let Decision = Gated(Rules(), "steer_right", 0.49, 0.9, &Driving(), &Clear(), false);
 	assert_eq!(Decision.Action, Action::SteerLeft);
 	assert!(!Decision.Obeyed);
 	// Recorded, not obeyed: the numbers still reach the overlay.
@@ -225,7 +229,7 @@ fn gate_keeps_the_rules_below_the_threshold() {
 
 #[test]
 fn gate_obeys_at_exactly_the_threshold() {
-	let Decision = Gate::New(0.5).Apply(Rules(), &Said("steer_right", 0.5, 0.1), &Driving(), &Clear(), false, 45.0);
+	let Decision = Gated(Rules(), "steer_right", 0.5, 0.1, &Driving(), &Clear(), false);
 	assert_eq!(Decision.Action, Action::SteerRight);
 	assert!(Decision.Obeyed);
 	assert!(Decision.Reason.contains("obeyed"), "{}", Decision.Reason);
@@ -236,7 +240,7 @@ fn gate_obeys_at_exactly_the_threshold() {
 
 #[test]
 fn gate_refuses_an_option_the_driver_cannot_perform() {
-	let Decision = Gate::New(0.5).Apply(Rules(), &Said("wheelie", 0.99, 1.0), &Driving(), &Clear(), false, 45.0);
+	let Decision = Gated(Rules(), "wheelie", 0.99, 1.0, &Driving(), &Clear(), false);
 	assert_eq!(Decision.Action, Action::SteerLeft);
 	assert!(!Decision.Obeyed);
 	assert!(Decision.Reason.contains("no key for it"), "{}", Decision.Reason);
@@ -245,7 +249,7 @@ fn gate_refuses_an_option_the_driver_cannot_perform() {
 #[test]
 fn gate_never_overrides_a_reversal() {
 	let Reversing = Decision::Rule(Action::ReverseLeft, false, 0.8, "stalled: reverse left".into());
-	let Decision = Gate::New(0.5).Apply(Reversing, &Said("steer_left", 0.99, 1.0), &Driving(), &Jammed(), true, 45.0);
+	let Decision = Gated(Reversing, "steer_left", 0.99, 1.0, &Driving(), &Jammed(), true);
 	assert_eq!(Decision.Action, Action::ReverseLeft);
 	assert!(!Decision.Obeyed);
 	assert!(Decision.Reason.contains("gated (manoeuvring)"), "{}", Decision.Reason);
@@ -257,21 +261,21 @@ fn the_model_may_pick_the_side_when_the_car_is_jammed() {
 	// behind it: the model is told the car has not advanced, and the side it
 	// names is the side the manoeuvre holds.
 	let Reversing = Decision::Rule(Action::ReverseLeft, false, 0.8, "stalled: blocked".into());
-	let Decision = Gate::New(0.5).Apply(Reversing, &Said("reverse_right", 0.9, 1.0), &Driving(), &Jammed(), true, 45.0);
+	let Decision = Gated(Reversing, "reverse_right", 0.9, 1.0, &Driving(), &Jammed(), true);
 	assert_eq!(Decision.Action, Action::ReverseRight, "{}", Decision.Reason);
 	assert!(Decision.Obeyed);
 	assert!(Decision.Keys().Down && Decision.Keys().Right);
 
 	// From a standstill with the rules still cruising, the same answer is the
 	// whole manoeuvre rather than a correction to one.
-	let Decision = Gate::New(0.5).Apply(Rules(), &Said("reverse_right", 0.9, 1.0), &Driving(), &Jammed(), false, 45.0);
+	let Decision = Gated(Rules(), "reverse_right", 0.9, 1.0, &Driving(), &Jammed(), false);
 	assert_eq!(Decision.Action, Action::ReverseRight, "{}", Decision.Reason);
 	assert!(Decision.Obeyed);
 }
 
 #[test]
 fn reversing_on_an_open_road_is_refused() {
-	let Decision = Gate::New(0.5).Apply(Rules(), &Said("reverse_left", 0.99, 1.0), &Driving(), &Clear(), false, 45.0);
+	let Decision = Gated(Rules(), "reverse_left", 0.99, 1.0, &Driving(), &Clear(), false);
 	assert_eq!(Decision.Action, Action::SteerLeft);
 	assert!(!Decision.Obeyed);
 	assert!(Decision.Reason.contains("not stuck"), "{}", Decision.Reason);
@@ -323,7 +327,7 @@ fn every_word_the_model_may_say_is_performable() {
 		("hold", Action::Cruise, false),
 	];
 	for (Word, Action, Throttle) in Expected {
-		let Decision = Gate::New(0.5).Apply(Rules(), &Said(Word, 0.9, 1.0), &Driving(), &Clear(), false, 45.0);
+		let Decision = Gated(Rules(), Word, 0.9, 1.0, &Driving(), &Clear(), false);
 		assert!(Decision.Obeyed, "{Word} was not obeyed: {}", Decision.Reason);
 		assert_eq!(Decision.Action, Action, "{Word}");
 		assert_eq!(Decision.Throttle, Throttle, "{Word}");
@@ -364,73 +368,6 @@ fn the_scene_names_the_car_ahead_in_the_games_own_words() {
 }
 
 #[test]
-fn a_cruise_send_carries_motion_and_traffic_but_not_route() {
-	// The mode picks the dimensions. A cruise send that carried every field we
-	// can read would be the flat object this design exists to avoid.
-	let Car = At(45.0, 0.0);
-	let Scene = Witness::default().Observe(&Car, true);
-	let Sent = ComposeSend(&Car, &Scene, None, 1);
-	assert_eq!(Sent.Mode, Mode::Cruise);
-	assert!(Sent.State["motion"].is_object(), "{}", Sent.State);
-	assert!(Sent.State["traffic"].is_object(), "{}", Sent.State);
-	assert!(Sent.State["route"].is_null(), "route is not a cruise dimension: {}", Sent.State);
-	assert!(Sent.Question["action"]["criteria"]["throttle"].is_string());
-}
-
-#[test]
-fn the_fourth_tick_carries_the_rotating_dimension() {
-	// Two consecutive sends differ by construction: the slow dimension arrives
-	// on a tick count, not when a caller remembers it.
-	let Car = At(45.0, 0.0);
-	let Scene = Witness::default().Observe(&Car, true);
-	let Third = ComposeSend(&Car, &Scene, None, 3);
-	let Fourth = ComposeSend(&Car, &Scene, None, 4);
-	assert_eq!(Third.Focus, "motion");
-	assert_eq!(Fourth.Focus, "route", "the rotation lands on the fourth tick");
-	assert!(Fourth.State["route"].is_object(), "{}", Fourth.State);
-	assert!(Third.State["route"].is_null(), "{}", Third.State);
-}
-
-#[test]
-fn a_route_on_screen_is_a_mission_asked_about_the_arrow() {
-	// The cue is the only thing that tells a mission from a cruise, so it is
-	// the only thing the mode reads to decide between them.
-	let Car = At(45.0, 0.0);
-	let Scene = Witness::default().Observe(&Car, true);
-	let Sent = ComposeSend(&Car, &Scene, Some(0.62), 1);
-	assert_eq!(Sent.Mode, Mode::Mission);
-	assert!(Sent.State["route"]["cue_x"].is_number(), "{}", Sent.State);
-	assert!(Sent.Question["action"]["criteria"]["steer_right"].is_string());
-}
-
-#[test]
-fn a_jammed_car_is_asked_which_way_out() {
-	let Car = At(46.0, 0.0);
-	let mut Watch = Witness::default();
-	let mut Scene = Watch.Observe(&Car, true);
-	for _ in 1..(Window + Insist) {
-		Scene = Watch.Observe(&Car, true);
-	}
-	let Sent = ComposeSend(&Car, &Scene, None, 1);
-	assert_eq!(Sent.Mode, Mode::Recover);
-	assert!(
-		Sent.Question["action"]["criteria"]["reverse_left"].is_string(),
-		"the escape has to be an option: {}",
-		Sent.Question
-	);
-}
-
-#[test]
-fn a_race_is_asked_about_pace_and_the_route() {
-	let Car = Car { RaceType:1, ..At(60.0, 0.0) };
-	let Scene = Witness::default().Observe(&Car, true);
-	let Sent = ComposeSend(&Car, &Scene, Some(0.4), 2);
-	assert_eq!(Sent.Mode, Mode::Race);
-	assert!(Sent.State["race"]["racetype"].is_number(), "{}", Sent.State);
-	assert!(Sent.Question["risk"].is_object(), "{}", Sent.Question);
-}
-
-#[test]
 fn a_row_the_page_sent_parses_into_a_lead() {
 	let Value = json!({
 		"car":1, "pos":[0.0,0.0,0.0], "heading":0.0, "speed":1.0, "kmh":3.0, "rpm":800, "gear":2,
@@ -443,97 +380,4 @@ fn a_row_the_page_sent_parses_into_a_lead() {
 	assert_eq!(Car.Traffic[0].Name, "TRAFFIC_SEDAN");
 	// The world state the game reports, not a default we invented.
 	assert_eq!((Car.Flow, Car.CareerRace, Car.Track), (6, 0, 4000));
-}
-
-/// One answer, captured from the live endpoint on this account.
-const ANSWER:&str = r#"{"result":{"model":"clef-flash","answers":{"action":{"type":"choice","choice":"steer_left","probabilities":{"steer_left":0.2975,"steer_right":0.2466,"throttle":0.2901,"brake":0.0776,"hold":0.0882},"confidence":0.0591},"confidence":{"type":"score","score":1.406,"legend":{"0":"guessing","1":"unsure","2":"fairly sure","3":"certain"},"probabilities":{"0":0.2258,"1":0.2898,"2":0.337,"3":0.1474},"confidence":0.027}},"usage":{"input_tokens":358,"output_tokens":0}},"success":true,"errors":[],"messages":[]}"#;
-
-#[test]
-fn parse_reads_a_measured_answer() {
-	let Advice = ParseAdvice(ANSWER).expect("the captured answer must parse");
-	assert_eq!(Advice.Model, "clef-flash");
-	assert_eq!(Advice.Action, "steer_left");
-	// The chosen option's own share, not a re-normalised guess.
-	assert!((Advice.Probability - 0.2975).abs() < 1e-9, "{}", Advice.Probability);
-	// The score question is a 0..3 scale, normalised to the 0..1 the overlay
-	// uses.
-	assert!((Advice.Confidence - 1.406 / 3.0).abs() < 1e-9, "{}", Advice.Confidence);
-	assert_eq!(Advice.Input, 358);
-	assert_eq!(Advice.Output, 0);
-}
-
-#[test]
-fn parse_refuses_a_failed_answer() {
-	let Body =
-		r#"{"result":null,"success":false,"errors":[{"code":10000,"message":"Authentication error"}],"messages":[]}"#;
-	assert_eq!(ParseAdvice(Body).unwrap_err(), Fail::Unparseable);
-}
-
-#[test]
-fn parse_refuses_garbage_and_an_answer_with_no_choice() {
-	assert_eq!(ParseAdvice("not json").unwrap_err(), Fail::Unparseable);
-	assert_eq!(
-		ParseAdvice(r#"{"success":true,"result":{"answers":{}}}"#).unwrap_err(),
-		Fail::Unparseable
-	);
-}
-
-#[test]
-fn budget_counts_requests_and_stops_at_the_ceiling() {
-	let mut Budget = Budget::New(2, 0);
-	assert!(Budget.Allows());
-	Budget.Charge(100, 0);
-	assert!(Budget.Allows());
-	Budget.Charge(100, 0);
-	assert!(!Budget.Allows());
-	assert_eq!(Budget.Requests, 2);
-	assert_eq!(Budget.Tokens(), 200);
-}
-
-#[test]
-fn budget_stops_on_tokens_even_when_requests_remain() {
-	let mut Budget = Budget::New(0, 200);
-	Budget.Charge(150, 0);
-	assert!(Budget.Allows());
-	Budget.Charge(60, 0);
-	assert!(!Budget.Allows());
-	assert_eq!(Budget.Tokens(), 210);
-}
-
-#[test]
-fn a_ceiling_of_zero_is_no_ceiling() {
-	let mut Budget = Budget::New(0, 0);
-	for _ in 0..1_000 {
-		Budget.Charge(1_000, 0);
-	}
-	assert!(Budget.Allows());
-}
-
-#[test]
-fn budget_line_reports_requests_and_tokens() {
-	let mut Budget = Budget::New(240, 200_000);
-	Budget.Charge(358, 0);
-	Budget.Charge(343, 0);
-	let Line = Budget.Line();
-	assert!(Line.contains("2 requests"), "{Line}");
-	assert!(Line.contains("701 tokens"), "{Line}");
-	assert!(Line.contains("701 in / 0 out"), "{Line}");
-	assert!(Line.contains("ceiling 240 requests / 200000 tokens"), "{Line}");
-}
-
-#[test]
-fn budget_prices_the_input_tokens_it_saw() {
-	let mut Budget = Budget::New(0, 0);
-	Budget.Charge(1_000_000, 0);
-	assert!((Budget.Cost() - 0.038).abs() < 1e-12, "{}", Budget.Cost());
-}
-
-#[test]
-fn budget_keeps_the_word_a_failed_call_reported() {
-	let mut Budget = Budget::New(4, 0);
-	Budget.Miss("http 401".into());
-	assert_eq!(Budget.Requests, 1);
-	assert_eq!(Budget.Failed, 1);
-	assert_eq!(Budget.Tokens(), 0);
-	assert!(Budget.Line().contains("last failure: http 401"), "{}", Budget.Line());
 }
