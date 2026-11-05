@@ -51,6 +51,7 @@ pub use crate::{
 		Decision::{Action, Decision, Keys},
 		Driver::Driver,
 		Policy::Policy,
+		Situation::{Insist, Situation, Window, Witness},
 		State::Car,
 	},
 };

@@ -33,6 +33,12 @@ pub const BackTicks:u32 = 5;
 pub struct Carry {
 	/// How many ticks are left backing out of something.
 	pub Back:u32,
+	/// The manoeuvre being held, when one is under way.
+	///
+	/// The side is a decision, not an arithmetic: the model may have picked it,
+	/// and a held manoeuvre that recomputed the side from the attempt count
+	/// would reverse the other way from the one that was chosen.
+	pub Held:Option<Action>,
 	/// How many times the stall rule has fired.
 	pub Reversals:u32,
 }
@@ -52,7 +58,7 @@ pub fn Decide(Car:&Car, Scene:&Situation, Cue:Option<f64>, TargetKmh:f64, Carry:
 	if Carry.Back > 0 {
 		Carry.Back -= 1;
 		return Decision::Rule(
-			Backing(Carry.Reversals),
+			Carry.Held.unwrap_or(Backing(Carry.Reversals)),
 			false,
 			0.8,
 			format!("backing out · {:.0} km/h · {}", Car.Kmh, Scene.Word),
@@ -60,13 +66,17 @@ pub fn Decide(Car:&Car, Scene:&Situation, Cue:Option<f64>, TargetKmh:f64, Carry:
 	}
 
 	if Scene.Jammed() {
-		Carry.Back = BackTicks;
+		// The attempt number moves first: the side is a function of which
+		// attempt this is, and the first one is the odd one.
 		Carry.Reversals += 1;
+		let Held = Backing(Carry.Reversals);
+		Carry.Held = Some(Held);
+		Carry.Back = BackTicks;
 		return Decision::Rule(
-			Backing(Carry.Reversals),
+			Held,
 			false,
 			0.8,
-			format!("stalled: {} · {}", Scene.Word, Scene.Sentence),
+			format!("{}: {} · {}", Held.Name(), Scene.Word, Scene.Sentence),
 		);
 	}
 

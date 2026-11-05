@@ -7,7 +7,8 @@
 #![allow(non_snake_case)]
 
 use AgenticNfsuDriver::{
-	Action, Advice, BackTicks, Budget, Car, Carry, DecideAction, Decision, Fail, Gate, ParseAdvice,
+	Action, Advice, Budget, Car, Carry, DecideAction, Decision, Fail, Gate, Insist, ParseAdvice,
+	Situation, Window, Witness,
 };
 
 /// A car doing 42 km/h: under the 45 target, so the throttle is expected on.
@@ -31,6 +32,29 @@ fn Rules() -> Decision { Decision::Rule(Action::SteerLeft, true, 0.42, "cue 0.44
 /// A car that is not moving: the state the stall rule exists for.
 fn Stuck() -> Car { Car { Address:1, Kmh:0.0, Gear:2, Heading:0.0, ..Car::default() } }
 
+/// A car at a given speed and place, for the window to watch.
+fn At(Kmh:f64, Y:f64) -> Car {
+	Car { Address:1, Kmh, Gear:3, Heading:0.0, Position:[0.0, Y, 0.0], ..Car::default() }
+}
+
+/// A car the window has not seen yet: the open road, before any measurement.
+fn Clear() -> Situation { Situation::Unknown() }
+
+/// A car against something, as the window reports it.
+///
+/// Written as a value rather than observed from a witness, because the gate is
+/// what is under test here: the witness has its own tests below.
+fn Jammed() -> Situation {
+	Situation {
+		Word:"blocked",
+		Sentence:"the throttle is held and the car has advanced only 0.0 m over the last 6 ticks, with its heading unchanged - it is pressed against something".into(),
+		Moved:0.0,
+		Turned:0.0,
+		Blocked:Insist,
+		Stalled:0,
+	}
+}
+
 /// Every action the vocabulary has, so a guard can walk all of them rather than
 /// the ones this file happened to remember.
 const EVERY:[Action; 8] = [
@@ -47,10 +71,15 @@ const EVERY:[Action; 8] = [
 #[test]
 fn a_stalled_car_reverses_while_it_steers() {
 	let mut Carry = Carry::default();
+	let mut Watch = Witness::default();
 	// Three ticks under 2 km/h is what stuck means, and the third is the
-	// decision that answers it.
+	// decision that answers it. The witness is what counts them now, so the
+	// ticks are observed rather than assumed.
 	let Decision = (0..3)
-		.map(|_| DecideAction(&Stuck(), None, 40.0, &mut Carry))
+		.map(|_| {
+			let Scene = Watch.Observe(&Stuck(), false);
+			DecideAction(&Stuck(), &Scene, None, 40.0, &mut Carry)
+		})
 		.last()
 		.expect("three ticks");
 	assert!(Decision.Action.Reversing(), "{}", Decision.Action.Name());
@@ -71,21 +100,64 @@ fn a_stalled_car_reverses_while_it_steers() {
 #[test]
 fn the_stall_rule_takes_a_side_and_the_other_one_next_time() {
 	let mut Carry = Carry::default();
+	let mut Watch = Witness::default();
 	let mut Sides = Vec::new();
 	for _ in 0..2 {
 		let Stall = (0..3)
-			.map(|_| DecideAction(&Stuck(), None, 40.0, &mut Carry))
+			.map(|_| {
+				let Scene = Watch.Observe(&Stuck(), false);
+				DecideAction(&Stuck(), &Scene, None, 40.0, &mut Carry)
+			})
 			.last()
 			.expect("three ticks");
 		Sides.push(Stall.Action);
 		// The rest of the manoeuvre keeps the side it started on: a reverse
-		// that wandered between sides would be a car sawing at a wall.
-		for _ in 0..BackTicks {
-			let Tick = DecideAction(&Stuck(), None, 40.0, &mut Carry);
+		// that wandered between sides would be a car sawing at a wall. The
+		// loop runs while the manoeuvre lasts rather than a fixed count, so a
+		// count that started before the stall is not mistaken for one that
+		// started after it.
+		while Carry.Back > 0 {
+			let Scene = Watch.Observe(&Stuck(), false);
+			let Tick = DecideAction(&Stuck(), &Scene, None, 40.0, &mut Carry);
 			assert_eq!(Tick.Action, Stall.Action, "{}", Tick.Reason);
 		}
 	}
 	assert_eq!(Sides, [Action::ReverseLeft, Action::ReverseRight], "the sides alternate");
+}
+
+#[test]
+fn a_car_spinning_against_a_wall_is_not_a_car_that_is_moving() {
+	// The defect this test exists for: the dashboard reports the wheels' speed,
+	// so a car held against a wall at full throttle reads 46 km/h while going
+	// nowhere. A rule that trusts that number drives into the wall forever.
+	let Car = At(46.0, 0.0);
+	let mut Watch = Witness::default();
+	let mut Scene = Watch.Observe(&Car, true);
+	for _ in 1..(Window + Insist) {
+		Scene = Watch.Observe(&Car, true);
+	}
+	assert_eq!(Scene.Word, "blocked", "{}", Scene.Sentence);
+	assert!(Scene.Jammed());
+	assert_eq!(Scene.Moved, 0.0);
+	assert!(Scene.Sentence.contains("pressed against"), "{}", Scene.Sentence);
+
+	// And the rules answer it, without waiting for the speed to drop.
+	let mut Carry = Carry::default();
+	let Decision = DecideAction(&Car, &Scene, None, 40.0, &mut Carry);
+	assert!(Decision.Action.Reversing(), "{}", Decision.Reason);
+}
+
+#[test]
+fn a_car_that_is_actually_driving_is_never_blocked() {
+	let mut Watch = Witness::default();
+	let mut Scene = Situation::Unknown();
+	for Tick in 0..24 {
+		// 2.5 m a tick is 45 km/h at the run's pace: a car on a road.
+		Scene = Watch.Observe(&At(45.0, Tick as f64 * 2.5), true);
+	}
+	assert_eq!(Scene.Word, "moving", "{}", Scene.Sentence);
+	assert!(!Scene.Jammed());
+	assert!(Scene.Moved >= 10.0, "{}", Scene.Moved);
 }
 
 #[test]
@@ -131,7 +203,7 @@ fn a_tick_holds_the_four_keys_the_page_is_sent() {
 
 #[test]
 fn gate_keeps_the_rules_below_the_threshold() {
-	let Decision = Gate::New(0.5).Apply(Rules(), &Said("steer_right", 0.49, 0.9), &Driving(), 45.0);
+	let Decision = Gate::New(0.5).Apply(Rules(), &Said("steer_right", 0.49, 0.9), &Driving(), &Clear(), 45.0);
 	assert_eq!(Decision.Action, Action::SteerLeft);
 	assert!(!Decision.Obeyed);
 	// Recorded, not obeyed: the numbers still reach the overlay.
@@ -143,7 +215,7 @@ fn gate_keeps_the_rules_below_the_threshold() {
 
 #[test]
 fn gate_obeys_at_exactly_the_threshold() {
-	let Decision = Gate::New(0.5).Apply(Rules(), &Said("steer_right", 0.5, 0.1), &Driving(), 45.0);
+	let Decision = Gate::New(0.5).Apply(Rules(), &Said("steer_right", 0.5, 0.1), &Driving(), &Clear(), 45.0);
 	assert_eq!(Decision.Action, Action::SteerRight);
 	assert!(Decision.Obeyed);
 	assert!(Decision.Reason.contains("obeyed"), "{}", Decision.Reason);
@@ -154,7 +226,7 @@ fn gate_obeys_at_exactly_the_threshold() {
 
 #[test]
 fn gate_refuses_an_option_the_driver_cannot_perform() {
-	let Decision = Gate::New(0.5).Apply(Rules(), &Said("wheelie", 0.99, 1.0), &Driving(), 45.0);
+	let Decision = Gate::New(0.5).Apply(Rules(), &Said("wheelie", 0.99, 1.0), &Driving(), &Clear(), 45.0);
 	assert_eq!(Decision.Action, Action::SteerLeft);
 	assert!(!Decision.Obeyed);
 	assert!(Decision.Reason.contains("no key for it"), "{}", Decision.Reason);
@@ -163,10 +235,47 @@ fn gate_refuses_an_option_the_driver_cannot_perform() {
 #[test]
 fn gate_never_overrides_a_reversal() {
 	let Reversing = Decision::Rule(Action::ReverseLeft, false, 0.8, "stalled: reverse left".into());
-	let Decision = Gate::New(0.5).Apply(Reversing, &Said("steer_left", 0.99, 1.0), &Driving(), 45.0);
+	let Decision = Gate::New(0.5).Apply(Reversing, &Said("steer_left", 0.99, 1.0), &Driving(), &Jammed(), 45.0);
 	assert_eq!(Decision.Action, Action::ReverseLeft);
 	assert!(!Decision.Obeyed);
 	assert!(Decision.Reason.contains("gated (reversing)"), "{}", Decision.Reason);
+}
+
+#[test]
+fn the_model_may_pick_the_side_when_the_car_is_jammed() {
+	// The state now carries the window, so this is an answer with evidence
+	// behind it: the model is told the car has not advanced, and the side it
+	// names is the side the manoeuvre holds.
+	let Reversing = Decision::Rule(Action::ReverseLeft, false, 0.8, "stalled: blocked".into());
+	let Decision = Gate::New(0.5).Apply(Reversing, &Said("reverse_right", 0.9, 1.0), &Driving(), &Jammed(), 45.0);
+	assert_eq!(Decision.Action, Action::ReverseRight, "{}", Decision.Reason);
+	assert!(Decision.Obeyed);
+	assert!(Decision.Keys().Down && Decision.Keys().Right);
+
+	// From a standstill with the rules still cruising, the same answer is the
+	// whole manoeuvre rather than a correction to one.
+	let Decision = Gate::New(0.5).Apply(Rules(), &Said("reverse_right", 0.9, 1.0), &Driving(), &Jammed(), 45.0);
+	assert_eq!(Decision.Action, Action::ReverseRight, "{}", Decision.Reason);
+	assert!(Decision.Obeyed);
+}
+
+#[test]
+fn reversing_on_an_open_road_is_refused() {
+	let Decision = Gate::New(0.5).Apply(Rules(), &Said("reverse_left", 0.99, 1.0), &Driving(), &Clear(), 45.0);
+	assert_eq!(Decision.Action, Action::SteerLeft);
+	assert!(!Decision.Obeyed);
+	assert!(Decision.Reason.contains("not stuck"), "{}", Decision.Reason);
+}
+
+#[test]
+fn a_held_manoeuvre_keeps_the_side_that_started_it() {
+	// The model picked the right; the attempt count would have said left. The
+	// side is a decision, so the held ticks follow the decision.
+	let mut Carry = Carry { Back:2, Held:Some(Action::ReverseRight), Reversals:1 };
+	let Scene = Jammed();
+	let Tick = DecideAction(&Driving(), &Scene, None, 45.0, &mut Carry);
+	assert_eq!(Tick.Action, Action::ReverseRight, "{}", Tick.Reason);
+	assert_eq!(Carry.Back, 1);
 }
 
 #[test]
@@ -185,7 +294,7 @@ fn every_word_the_model_may_say_is_performable() {
 		("hold", Action::Cruise, false),
 	];
 	for (Word, Action, Throttle) in Expected {
-		let Decision = Gate::New(0.5).Apply(Rules(), &Said(Word, 0.9, 1.0), &Driving(), 45.0);
+		let Decision = Gate::New(0.5).Apply(Rules(), &Said(Word, 0.9, 1.0), &Driving(), &Clear(), 45.0);
 		assert!(Decision.Obeyed, "{Word} was not obeyed: {}", Decision.Reason);
 		assert_eq!(Decision.Action, Action, "{Word}");
 		assert_eq!(Decision.Throttle, Throttle, "{Word}");

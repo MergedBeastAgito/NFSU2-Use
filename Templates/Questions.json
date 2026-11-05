@@ -1,19 +1,39 @@
 {
 	"$comment": "Question templates, one per use case. Each is a Clef `questions` object: typed questions over the fields in Observation.json, with every allowed option written out so the model returns a probability per option rather than free text. Compose a request as {model, state, questions}.",
 	"version": 1,
-	"$lanes": "A lane is a request shape, not a request: each names the fields it sends and the templates it serves. A driving tick sends three numbers and gets an answer in one round trip; a recovery tick sends the wheel state; the full state is only for the slow lane. Sending everything every tick is the thing this avoids - it costs tokens, latency and money for fields the question never reads.",
+	"$lanes": "A lane is a request shape, not a request: each names the fields it sends and the templates it serves. A driving tick sends the numbers the question reads plus the sentence that says what they mean; a recovery tick sends the window's metres and the wheel state; the full state is only for the slow lane. Sending everything every tick is the thing this avoids - it costs tokens, latency and money for fields the question never reads. What it must never avoid is the sentence: a model given numbers and no description answers as if the road were empty, which is how a car ends up holding the throttle against a wall.",
 	"lanes": {
 		"drive": {
-			"fields": ["speed_kmh", "gear", "route_cue_x"],
+			"fields": [
+				"speed_kmh",
+				"gear",
+				"heading_degrees",
+				"route_cue_x",
+				"verdict",
+				"situation",
+				"moved_m",
+				"turned_degrees",
+				"blocked_ticks"
+			],
 			"templates": ["freeroam.track_cue", "freeroam.cruise"],
 			"cadence": "every tick (150-250 ms)",
-			"why": "the fastest lane: three numbers, the question that decides steering and pace"
+			"why": "the fastest lane: the numbers plus the sentence that says what they mean - five numbers and no description is what made the model answer 'throttle' at a wall"
 		},
 		"recover": {
-			"fields": ["speed_kmh", "gear", "grounded", "surface"],
-			"templates": ["recovery.stuck", "surface.loss"],
-			"cadence": "only while stuck or slipping",
-			"why": "wheel state is only worth sending when a wheel is doing something"
+			"fields": [
+				"verdict",
+				"situation",
+				"speed_kmh",
+				"gear",
+				"moved_m",
+				"turned_degrees",
+				"blocked_ticks",
+				"grounded",
+				"surface"
+			],
+			"templates": ["recovery.blocked", "surface.loss"],
+			"cadence": "only while blocked, creeping or slipping",
+			"why": "the escape lane: the window's metres are the evidence that the car is against something, and reversing with the wheel turned is the only way out of it"
 		},
 		"corner": {
 			"fields": [
@@ -113,26 +133,25 @@
 				}
 			}
 		},
-		"recovery.stuck": {
-			"when": "stuck: speed under 2 km/h for three ticks",
+		"recovery.blocked": {
+			"when": "verdict is blocked or stalled, or the rules are mid-manoeuvre",
 			"questions": {
 				"action": {
 					"type": "choice",
-					"instructions": "The car is not moving. What next?",
+					"instructions": "The car cannot make progress where it is pointing: the situation field says what it is against, and moved_m is how far it has actually travelled while the throttle was held. Reversing with the wheel turned is how a car leaves a wall; pushing forward again only presses it back into what it hit. Which way should the car go?",
 					"criteria": {
-						"reverse": "Back out with the steering turned",
-						"throttle": "Keep the throttle down and wait",
-						"brake": "Brake and stop trying"
+						"reverse_left": "Back out with the wheel turned left: the way out is behind and to the left",
+						"reverse_right": "Back out with the wheel turned right: the way out is behind and to the right",
+						"steer_left": "Turn the wheel left and keep pushing forward",
+						"steer_right": "Turn the wheel right and keep pushing forward",
+						"throttle": "Hold the throttle down and wait for the car to come free",
+						"brake": "Stop and give up on this direction"
 					}
 				},
-				"escape": {
-					"type": "choice",
-					"instructions": "Which way is the way out?",
-					"criteria": {
-						"left": "Back out turning left",
-						"right": "Back out turning right",
-						"either": "No reason to prefer one"
-					}
+				"confidence": {
+					"type": "score",
+					"instructions": "How sure are you of that way out?",
+					"criteria": ["guessing", "unsure", "fairly sure", "certain"]
 				}
 			}
 		},

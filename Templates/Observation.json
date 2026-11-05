@@ -115,7 +115,12 @@
 		}
 	},
 	"derived": {
-		"stuck": "speed_kmh < 2 for three consecutive ticks while the throttle is held",
+		"moved_m": "metres the car actually advanced over the last 6 ticks, from the position delta - not from the wheel speed",
+		"turned_degrees": "heading change over the same window, wrapped to a half turn",
+		"blocked_ticks": "consecutive ticks with the throttle held and the window's metres under 1.5",
+		"verdict": "one of moving, creeping, blocked, stalled - what the rules branch on",
+		"situation": "the verdict in words, sent beside the numbers: the model is told what the numbers mean, not left to infer it",
+		"stuck": "blocked_ticks >= 3 or 3 consecutive ticks under 2 km/h - speed alone cannot say it, because a car held against a wall still reports its wheel speed",
 		"aligned": "route_cue_x within 0.35 of 0.5",
 		"pace": "speed_kmh compared against the knob 'target'",
 		"slipping": "any slip value above 5 on a road surface"

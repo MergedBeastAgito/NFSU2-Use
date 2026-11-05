@@ -49,13 +49,20 @@ fn Number<T:std::str::FromStr>(Name:&str, Default:T) -> T {
 fn Show(Answer:&serde_json::Value) -> String {
 	let Car = &Answer["car"];
 	let Decision = &Answer["decision"];
+	// The scene is what the car is doing, as opposed to what its wheels say:
+	// the verdict and the window's metres are printed beside the speed so a
+	// trace of a car held against a wall does not read like a trace of a car
+	// driving.
+	let Scene = &Answer["scene"];
 	let Field = |Value:&serde_json::Value| Value.as_f64().unwrap_or(0.0);
 	format!(
-		"{:4} {:>11} {:>3} km/h gear {} · {} · {:.0},{:.0},{:.0}",
+		"{:4} {:>11} {:>3} km/h gear {} · {:<8} {:>4.1} m · {} · {:.0},{:.0},{:.0}",
 		Answer["tick"].as_u64().unwrap_or(0),
 		Decision["action"].as_str().unwrap_or("-"),
 		Field(&Car["kmh"]).round(),
 		Car["gear"].as_i64().unwrap_or(0),
+		Scene["word"].as_str().unwrap_or("-"),
+		Field(&Scene["moved_m"]),
 		Decision["reason"].as_str().unwrap_or("-"),
 		Field(&Car["pos"][0]),
 		Field(&Car["pos"][1]),

@@ -53,11 +53,16 @@ use serde_json::{Value, json};
 use crate::{
 	Fn::{
 		Cloudflare::Advise as AdviseCloudflare,
-		Decide::{Carry, Decide as DecideAction},
+		Decide::{BackTicks, Carry, Decide as DecideAction},
 		Expressions,
 		Gate::Gate,
 	},
-	Struct::{Budget::Budget, Policy::Policy, State::Car},
+	Struct::{
+		Budget::Budget,
+		Policy::Policy,
+		Situation::Witness,
+		State::Car,
+	},
 };
 
 /// The port this adapter provides, as `module.json` declares it.
@@ -85,6 +90,16 @@ struct Run {
 	/// stall rule has fired - which is what decides which side the next reverse
 	/// turns.
 	Carry:Carry,
+	/// The window the car's progress is measured over, and the two counts that
+	/// outlive it.
+	Witness:Witness,
+	/// The throttle the car felt on the previous tick.
+	///
+	/// The scene is measured against it rather than against this tick's
+	/// decision: the keys are asserted after the state is read, so a witness
+	/// told about a throttle that has not been pressed would blame the car for
+	/// a keypress the game never received.
+	Throttle:bool,
 }
 
 /// One substrate behind `agentic.adapter`: the NFSU2 browser port, driven from
@@ -183,14 +198,19 @@ impl Driver {
 		// The counters are read and written in one scope, before any await: a
 		// guard held across one would make the future `!Send` and the port
 		// unusable from a spawned task.
-		let (Tick, mut Decision) = {
+		let (Tick, mut Decision, Scene) = {
 			let mut Guard = Lock(&self.Run);
 			// One reborrow of the whole struct: two field borrows through the
 			// guard itself would be two mutable borrows of the guard.
 			let Run = &mut *Guard;
 			Run.Tick += 1;
-			let Decision = DecideAction(&Car, Policy.Cue, Policy.TargetKmh, &mut Run.Carry);
-			(Run.Tick, Decision)
+			// The scene is measured first, because the rules and the model are
+			// both answered by it: a car whose wheels are turning but which has
+			// not moved is a car against something, and neither the dashboard
+			// nor a single position read can say so.
+			let Scene = Run.Witness.Observe(&Car, Run.Throttle);
+			let Decision = DecideAction(&Car, &Scene, Policy.Cue, Policy.TargetKmh, &mut Run.Carry);
+			(Run.Tick, Decision, Scene)
 		};
 
 		if let Some(Name) = &Policy.Model
@@ -200,10 +220,10 @@ impl Driver {
 			if Meter.Allows() {
 				// A failed call is not a decision: the rules already made one,
 				// and the meter records why the model is not in it.
-				match AdviseCloudflare(&Car, Policy.Cue, Name) {
+				match AdviseCloudflare(&Car, &Scene, Policy.Cue, Name) {
 					Ok(Advice) => {
 						Meter.Charge(Advice.Input, Advice.Output);
-						Decision = Gate::New(Policy.Threshold).Apply(Decision, &Advice, &Car, Policy.TargetKmh);
+						Decision = Gate::New(Policy.Threshold).Apply(Decision, &Advice, &Car, &Scene, Policy.TargetKmh);
 					},
 					Err(Why) => Meter.Miss(Why.Why()),
 				}
@@ -219,6 +239,19 @@ impl Driver {
 			}
 		}
 
+		// An obeyed reverse is a manoeuvre, not a tick. The model picked the
+		// side and the rules hold it for the same handful of ticks a stall
+		// escape gets, or a 150 ms tap of the reverse key would move the car
+		// nothing at all and the next tick would drive it back into the wall.
+		if Decision.Obeyed && Decision.Action.Reversing() {
+			let mut Guard = Lock(&self.Run);
+			Guard.Carry.Back = BackTicks;
+			Guard.Carry.Held = Some(Decision.Action);
+			Guard.Carry.Reversals += 1;
+		}
+		// What the car will have felt by the next read.
+		Lock(&self.Run).Throttle = Decision.Throttle;
+
 		// The keys come from the decision as one set, never from a switch of
 		// this file's own: a reverse tick holds the reverse key and a steering
 		// key, and a loop here that named the keys itself would be a second
@@ -230,6 +263,13 @@ impl Driver {
 		let Payload = json!({
 			"tick": Tick,
 			"car": { "kmh": Car.Kmh, "gear": Car.Gear, "heading": Car.Heading, "pos": Car.Position, "rpm": Car.Rpm },
+			"scene": {
+				"word": Scene.Word,
+				"moved_m": Scene.Moved,
+				"turned_degrees": Scene.Turned,
+				"blocked_ticks": Scene.Blocked,
+				"sentence": Scene.Sentence
+			},
 			"decision": {
 				"action": Decision.Action.Name(),
 				"ms": (Decision.Duty * 100.0).round(),

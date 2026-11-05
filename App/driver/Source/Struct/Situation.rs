@@ -130,15 +130,15 @@ impl Witness {
 		// A window that has not completed yet is not evidence of progress, and
 		// it is not evidence of a wall either: the car is presumed moving
 		// until one window says otherwise.
-		let Advancing = !self.Done || self.Last >= Advancing;
-		self.Blocked = if ThrottleHeld && !Advancing { self.Blocked + 1 } else { 0 };
+		let Progress = !self.Done || self.Last >= Advancing;
+		self.Blocked = if ThrottleHeld && !Progress { self.Blocked + 1 } else { 0 };
 		self.Stalled = if Car.Kmh < StoppedKmh { self.Stalled + 1 } else { 0 };
 
 		let Word = if self.Blocked >= Insist {
 			"blocked"
 		} else if self.Stalled >= Insist {
 			"stalled"
-		} else if ThrottleHeld && !Advancing {
+		} else if ThrottleHeld && !Progress {
 			// The window says it did not advance and the throttle was down:
 			// the wheels may still be turning, which is what spinning on a
 			// wall or a kerb looks like from the dashboard.
