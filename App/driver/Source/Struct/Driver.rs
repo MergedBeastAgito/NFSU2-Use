@@ -48,7 +48,7 @@ use AgenticSdk::{
 	Port::Adapter::Error as AdapterError,
 	Target,
 };
-use AgenticLane::Decide as DecidePort;
+use AgenticLane::DecidePort;
 use serde_json::{Value, json};
 
 use crate::{
@@ -56,6 +56,7 @@ use crate::{
 		Consult::{Consult, Consulted},
 		Decide::{BackTicks, Carry, Decide as DecideAction},
 		Expressions,
+		Gate::Gate,
 		Observe::Observe,
 	},
 	Struct::{Policy::Policy, Situation::Witness, State::Car},

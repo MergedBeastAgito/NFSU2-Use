@@ -35,7 +35,7 @@
 
 use serde_json::{Map, Value, json};
 
-use AgenticLane::{Answer, Answered, Decide as DecidePort, Selection, State as Reading};
+use AgenticLane::{Answer, Answered, DecidePort, Selection, State as Reading};
 use AgenticSdk::Call;
 
 /// What one answer said, as the gate's four values.

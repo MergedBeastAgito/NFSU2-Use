@@ -148,6 +148,10 @@ fn held(Policy:Policy) -> (Arc<dyn Adapter>, Arc<Scripted>) {
 		Policy,
 		Duration::from_secs(1),
 		Arc::new(Tokio),
+		// No decider: every case in this file is about the adapter, and the
+		// round trip has its own target (`Test/Corpus.rs`). A rules-only adapter
+		// is also the run a broken corpus degrades to.
+		None,
 	));
 	(Held, Page)
 }
@@ -345,6 +349,7 @@ async fn the_release_is_still_answered_after_a_long_run() {
 		Policy::default(),
 		Duration::from_millis(1),
 		Arc::new(Tokio),
+		None,
 	));
 	tokio::time::sleep(Duration::from_millis(30)).await;
 	Held.Dispose().await;

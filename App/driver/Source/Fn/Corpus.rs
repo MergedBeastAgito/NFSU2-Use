@@ -129,7 +129,7 @@ pub fn Priority() -> Rules {
 /// template the selected lane does not serve is skipped, so `freeroam.cruise`
 /// applies to `drive` and to nothing else.
 pub fn Templates() -> Rules {
-	Rules::New(vec![Rule::New("freeroam.cruise", When::Lacks("route_cue_x"))])
+	Rules::New(vec![Rule::New("freeroam.cruise", When::Absent("route_cue_x"))])
 }
 
 /// Load the corpus and build the port's value.

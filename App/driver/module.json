@@ -12,7 +12,7 @@
 		]
 	},
 	"requires": {
-		"ports": ["agentic.browse"]
+		"ports": ["agentic.browse", "agentic.lane.decide"]
 	},
 	"artefact": {
 		"entry": "Target/release/nfsu-driver",

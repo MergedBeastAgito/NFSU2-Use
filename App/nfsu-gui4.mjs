@@ -247,7 +247,7 @@ dec.insertBefore(rule, decHdr.nextSibling);
 const rows = {};
 for (const a of ACTIONS) {
   const row = S(document.createElement('div'), GRID + ';color:#8fb8cf');
-  const slug = a.replace(/\s+/g, '-');
+  const slug = a.split(' ').join('-');
   const name = S(document.createElement('span'), 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis');
   name.textContent = a;
   const mk = (col, width) => { const e = S(document.createElement('span'), 'color:#5f7d95;text-align:right'); e.id = 'hd-' + slug + '-' + col; e.textContent = '-'; return e };
@@ -261,6 +261,53 @@ for (const a of ACTIONS) {
 
 const set = (node, text) => { if (D.cache[node.id] !== text) { node.textContent = text; D.cache[node.id] = text } };
 const modeEl = obsHdr.querySelector('#ho-mode');
+
+// What crossed the wire, last exchange only. The decision rows say what the
+// policy chose; this says what it was asked and what came back, which is the
+// only way to tell a refused request from a confident answer. Bottom-right,
+// because the three corners already belong to the HUD, the observations and
+// the decisions, and this is the fourth question a reader asks.
+const WIRE_PRE = 'margin:0;color:#9fe8ff;white-space:pre-wrap;word-break:break-word;font:inherit;font-size:9px';
+const WIRE_HDR = 'color:#cfeeff;letter-spacing:.06em';
+const NOTHING = 'nothing sent yet';
+const wireEl = mk('hermes-wire', BOX + ';right:8px;bottom:8px;width:360px;max-height:38vh;overflow:auto;pointer-events:none');
+const wireHdr = S(document.createElement('div'), WIRE_HDR); wireHdr.id = 'hw-hdr';
+wireEl.appendChild(wireHdr);
+sec(wireEl, 'SEND');
+const wireSend = S(document.createElement('pre'), WIRE_PRE); wireSend.id = 'hw-send';
+wireEl.appendChild(wireSend);
+sec(wireEl, 'RECEIVE');
+const wireRecv = S(document.createElement('pre'), WIRE_PRE); wireRecv.id = 'hw-recv';
+wireEl.appendChild(wireRecv);
+
+// Scrub by name and by shape. A named secret is easy; the shape is what
+// matters, because a token in a body has no name - it is just a long run of
+// alphanumerics that a screenshot would preserve. The bodies carry no
+// credential today, and the panel is built so that stays true if one appears.
+const REDACT_NAMES = ['CLOUDFLARE_API_TOKEN', 'Authorization', 'api_key', 'apiKey'];
+const redact = (x) => {
+  if (x === undefined || x === null) return '';
+  let t = String(x);
+  t = t.replace(/Bearer\s+[^\s"',}]+/gi, '***');
+  t = t.replace(/[A-Za-z0-9_-]{20,}/g, '***');
+  for (const k of REDACT_NAMES) t = t.split(k).join('***');
+  return t;
+};
+// Pretty when it parses, raw when it does not: a malformed reply is the one a
+// reader most needs to see, so a parse failure shows the bytes, never a blank.
+const pretty = (x) => {
+  const t = (x === undefined || x === null) ? '' : String(x);
+  if (!t) return '';
+  try { return JSON.stringify(JSON.parse(t), null, 1) } catch (e) { return t }
+};
+// One writer for both bodies: text through the same cache as every other
+// field, and the dim colour swapped only when the empty state flips.
+const wireWrite = (node, text) => {
+  set(node, text);
+  const empty = text === NOTHING;
+  const k = node.id + ':dim';
+  if (D.cache[k] !== empty) { D.cache[k] = empty; S(node, WIRE_PRE + (empty ? ';color:#5f7d95' : '')) }
+};
 
 function paint() {
   const n = window.__nfsu2, s = n && n.session, i = s && s.input, st = i && i.status ? i.status() : null;
@@ -326,11 +373,35 @@ function paint() {
   for (const act of ACTIONS) {
     const chosen = (d.action || '') === act;
     const r = rows[act];
-    S(r.row, GRID + ';' + (chosen ? 'background:rgba(120,220,255,.18);color:#eaf7ff' : 'color:#8fb8cf'));
+    // Restyling the row is a cssText write, so it is cached like any other:
+    // seven rows times four paints a second is churn the panel does not need.
+    if (D.cache['row:' + act] !== chosen) {
+      D.cache['row:' + act] = chosen;
+      S(r.row, GRID + ';' + (chosen ? 'background:rgba(120,220,255,.18);color:#eaf7ff' : 'color:#8fb8cf'));
+    }
     set(r.ms, chosen ? (d.ms ? d.ms + 'ms' : 'now') : '-');
     set(r.prob, d.probability === undefined || d.probability === null ? '-' : (+d.probability).toFixed(2));
     set(r.conf, d.confidence === undefined || d.confidence === null ? '-' : (+d.confidence).toFixed(1));
   }
+  // publish() assigns its payload onto this same debug object, so the wire
+  // arrives beside the decision it explains; a driver that nests it under
+  // decision is read the same way rather than needing a second hook.
+  const w = D.wire || (d && d.wire) || null;
+  const wSend = w ? redact(pretty(w.send)) : '';
+  const wRecv = w ? redact(pretty(w.recv)) : '';
+  const wErr = w && w.error ? redact(w.error) : '';
+  const wMs = w && typeof w.ms === 'number' ? Math.round(w.ms) : null;
+  const wLane = w && w.lane ? redact(w.lane) : '';
+  if (D.cache.__wireErr !== !!wErr) {
+    D.cache.__wireErr = !!wErr;
+    S(wireHdr, WIRE_HDR + (wErr ? ';color:#ffb3b3' : ''));
+  }
+  set(wireHdr, w
+    ? 'WIRE · ' + (wLane || 'lane ?') + ' · ' + (wMs === null ? '?ms' : wMs + 'ms') + (wErr ? ' · ERROR ' + wErr : ' · ok')
+    : 'WIRE · idle');
+  wireWrite(wireSend, wSend || NOTHING);
+  wireWrite(wireRecv, wRecv || NOTHING);
+
   set(driving, 'driving: ' + D.mode + ' · ' + (car.kmh === undefined ? '?' : car.kmh) + ' km/h · ' +
     ((a.cx === null || a.cx === undefined) ? 'no cue' : 'cue ' + a.cx.toFixed(2)) + ' · ' + (d.action || '-'));
 }
@@ -341,7 +412,7 @@ paint();
 // first rather than run beside it, or two writers race and the panels disagree.
 if (D._paintTimer) clearInterval(D._paintTimer);
 D._paintTimer = setInterval(paint, 250);
-return { installed: true, obs: !!document.getElementById('hermes-obs'), dec: !!document.getElementById('hermes-dec'), mode: D.mode };
+return { installed: true, obs: !!document.getElementById('hermes-obs'), dec: !!document.getElementById('hermes-dec'), wire: !!document.getElementById('hermes-wire'), mode: D.mode };
 })()`;
 
 const out = await ev(INSTALL);

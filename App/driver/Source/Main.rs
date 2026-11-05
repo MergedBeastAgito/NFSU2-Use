@@ -31,7 +31,7 @@
 
 use std::{sync::Arc, time::Duration};
 
-use AgenticLane::{Budget, Decide as DecidePort, Decider};
+use AgenticLane::{Budget, DecidePort, Decider};
 use AgenticNfsuDriver::{Driver, OpenCorpus, Policy, Priority};
 use AgenticSdk::{Adapter, Browse, Call, Chrome, ChromeOptions, Clock, Create, Never, OpenOptions, Options, Tokio};
 
@@ -186,7 +186,8 @@ async fn main() -> Result<(), String> {
 	// no business knowing which corpus this is.
 	let Port:Option<Arc<dyn DecidePort>> = match &Model {
 		Some(Decider) => {
-			let Port:Arc<dyn DecidePort> = Arc::clone(Decider);
+			let Concrete:Arc<Decider> = Decider.clone();
+			let Port:Arc<dyn DecidePort> = Concrete;
 			Some(Port)
 		},
 		None => None,

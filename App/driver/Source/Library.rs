@@ -53,6 +53,28 @@
 //! ([`Fn::Gate`]), the page expressions, the car and scene readings, and the
 //! transport ([`Fn::Cloudflare`]: the token, curl and the status code, which the
 //! Lane crate reaches through its `Poster` seam and never implements itself).
+//!
+//! # What took its place, one file per decision
+//!
+//! The round trip is now a call, and each half of it has exactly one owner:
+//!
+//! - [`Fn::Observe`] turns one tick into the field names the corpus uses. It
+//!   writes only what was measured; a field the ingestion does not read yet
+//!   travels as `null` rather than as a plausible number.
+//! - [`Fn::Corpus`] states the lane priority and the template preference - the
+//!   order that used to be `Struct::Mode` - and loads the corpus once, at
+//!   startup, so a broken corpus is a sentence before the first tick rather than
+//!   a surprise in the tenth.
+//! - [`Fn::Poster::Http`] is the `Poster` the Lane crate never implements: the
+//!   credentials, curl, the status code and the caller's deadline. It is the one
+//!   file in this crate that opens a socket.
+//! - [`Fn::Consult`] selects, asks, and reads the typed answer into the four
+//!   values the gate takes - plus the distribution the overlay paints, which the
+//!   gate deliberately never sees.
+//!
+//! A consultation that ends without an answer is not a failed tick. The rules
+//! decided before the model was asked, so the car keeps driving and the payload's
+//! `modelAdvice` carries the word for why the model is not in the decision.
 
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
