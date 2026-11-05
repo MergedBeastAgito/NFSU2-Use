@@ -20,14 +20,20 @@
 //! the answer is judged like any other, and the model may pick the side. What
 //! it may not do is abort a manoeuvre already under way: a reverse half-done
 //! leaves the car against the wall it was leaving.
+//!
+//! # Why the answer arrives as four values
+//!
+//! The gate takes the word, its probability, the model's own confidence and the
+//! model's name - not the Lane crate's `Answer`. A gate is this crate's policy,
+//! and a policy that named another crate's reply type would be a policy that
+//! changed when that crate did. Four values are also exactly what the gate
+//! reads: the distribution behind the word is the parser's business, and the
+//! meter's is the spend.
 
-use crate::{
-	Fn::Cloudflare::Advice,
-	Struct::{
-		Decision::{Action, Decision},
-		Situation::Situation,
-		State::Car,
-	},
+use crate::Struct::{
+	Decision::{Action, Decision},
+	Situation::Situation,
+	State::Car,
 };
 
 /// One option, as the driver would perform it.
@@ -63,21 +69,18 @@ impl Gate {
 	pub fn Apply(
 		&self,
 		Rule:Decision,
-		Advice:&Advice,
+		Model:&str,
+		Word:&str,
+		Probability:f64,
+		Confidence:f64,
 		Car:&Car,
 		Scene:&Situation,
 		Manoeuvre:bool,
 		TargetKmh:f64,
 	) -> Decision {
-		let Said = format!(
-			"{} {} {:.0}% c{:.2}",
-			Advice.Model,
-			Advice.Action,
-			Advice.Probability * 100.0,
-			Advice.Confidence
-		);
+		let Said = format!("{Model} {Word} {:.0}% c{:.2}", Probability * 100.0, Confidence);
 		let Reversing = Rule.Action.Reversing();
-		let Escape = Reverses(&Advice.Action);
+		let Escape = Reverses(Word);
 
 		// A manoeuvre already under way is finished. The model may say which
 		// way to come out - that is a choice about the road behind, and it is
@@ -86,24 +89,24 @@ impl Gate {
 		// would abandon the turn that is carrying it away.
 		if Manoeuvre && !Escape {
 			let Reason = format!("{} · {Said} gated (manoeuvring)", Rule.Reason);
-			return Rule.Noted(Advice.Probability, Advice.Confidence).Explain(Reason);
+			return Rule.Noted(Probability, Confidence).Explain(Reason);
 		}
 
-		if Advice.Probability < self.Threshold {
+		if Probability < self.Threshold {
 			let Reason = format!("{} · {Said} gated (<{:.2})", Rule.Reason, self.Threshold);
-			return Rule.Noted(Advice.Probability, Advice.Confidence).Explain(Reason);
+			return Rule.Noted(Probability, Confidence).Explain(Reason);
 		}
 
 		// Reversing on an open road is not a decision, it is a misreading of
 		// the scene: the car is making progress and the answer would undo it.
 		if Escape && !Scene.Jammed() && !Reversing {
 			let Reason = format!("{} · {Said} gated (not stuck: {})", Rule.Reason, Scene.Word);
-			return Rule.Noted(Advice.Probability, Advice.Confidence).Explain(Reason);
+			return Rule.Noted(Probability, Confidence).Explain(Reason);
 		}
 
-		let Some(Step) = Perform(&Advice.Action, Car, TargetKmh) else {
+		let Some(Step) = Perform(Word, Car, TargetKmh) else {
 			let Reason = format!("{} · {Said} gated (no key for it)", Rule.Reason);
-			return Rule.Noted(Advice.Probability, Advice.Confidence).Explain(Reason);
+			return Rule.Noted(Probability, Confidence).Explain(Reason);
 		};
 
 		Decision {
@@ -111,8 +114,8 @@ impl Gate {
 			Throttle:Step.Throttle,
 			Duty:Step.Duty,
 			Reason:format!("{} · {Said} obeyed", Rule.Reason),
-			Probability:Some(Advice.Probability),
-			Confidence:Some(Advice.Confidence),
+			Probability:Some(Probability),
+			Confidence:Some(Confidence),
 			Obeyed:true,
 		}
 	}

@@ -2,10 +2,10 @@
 //!
 //! This is the half `module.json` has been claiming since it said
 //! `"kind": "adapter"`. The call path was already here - read the car, decide,
-//! ask the model, hold the keys, publish - but it lived in `Source/Main.rs`,
-//! which is a program and not a value: nothing could hold it, pass it on, or
-//! substitute it. `Driver` is that value, and `impl Adapter for Driver` is what
-//! makes it reachable from outside this crate without naming this crate.
+//! hold the keys, publish - but it lived in `Source/Main.rs`, which is a
+//! program and not a value: nothing could hold it, pass it on, or substitute it.
+//! `Driver` is that value, and `impl Adapter for Driver` is what makes it
+//! reachable from outside this crate without naming this crate.
 //!
 //! # What a request is
 //!
@@ -21,11 +21,11 @@
 //!
 //! # What it holds, and what `Dispose` releases
 //!
-//! A page handle, the browser session that owns it, the meter, and the two
-//! counters the rules carry between ticks. `Dispose` releases the keys first -
-//! a held throttle survives the process that set it, so that is the one step
-//! that must not be skipped - and then lets the session go. It is idempotent
-//! and it never fails, which is what the port requires of a release.
+//! A page handle, the browser session that owns it, and the two counters the
+//! rules carry between ticks. `Dispose` releases the keys first - a held
+//! throttle survives the process that set it, so that is the one step that must
+//! not be skipped - and then lets the session go. It is idempotent and it never
+//! fails, which is what the port requires of a release.
 
 use std::{
 	sync::{
@@ -52,17 +52,10 @@ use serde_json::{Value, json};
 
 use crate::{
 	Fn::{
-		Cloudflare::Advise as AdviseCloudflare,
 		Decide::{BackTicks, Carry, Decide as DecideAction},
 		Expressions,
-		Gate::Gate,
 	},
-	Struct::{
-		Budget::Budget,
-		Policy::Policy,
-		Situation::Witness,
-		State::Car,
-	},
+	Struct::{Policy::Policy, Situation::Witness, State::Car},
 };
 
 /// The port this adapter provides, as `module.json` declares it.
