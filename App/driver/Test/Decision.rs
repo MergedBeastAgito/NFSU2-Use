@@ -7,8 +7,8 @@
 #![allow(non_snake_case)]
 
 use AgenticNfsuDriver::{
-	Action, Advice, Budget, Car, Carry, DecideAction, Decision, Fail, Gate, Insist, Lead,
-	ParseAdvice, Situation, TurnOutTicks, Window, Witness,
+	Action, Advice, Budget, Car, Carry, ComposeSend, DecideAction, Decision, Fail, Gate, Insist,
+	Lead, Mode, ParseAdvice, Situation, TurnOutTicks, Window, Witness,
 };
 use serde_json::json;
 
@@ -361,6 +361,73 @@ fn the_scene_names_the_car_ahead_in_the_games_own_words() {
 	assert!(Scene.Sentence.contains("traffic"), "{}", Scene.Sentence);
 	assert!(Scene.Sentence.contains("TRAFFIC_SEDAN"), "{}", Scene.Sentence);
 	assert!(Scene.Sentence.contains("closing at 14 km/h"), "{}", Scene.Sentence);
+}
+
+#[test]
+fn a_cruise_send_carries_motion_and_traffic_but_not_route() {
+	// The mode picks the dimensions. A cruise send that carried every field we
+	// can read would be the flat object this design exists to avoid.
+	let Car = At(45.0, 0.0);
+	let Scene = Witness::default().Observe(&Car, true);
+	let Sent = ComposeSend(&Car, &Scene, None, 1);
+	assert_eq!(Sent.Mode, Mode::Cruise);
+	assert!(Sent.State["motion"].is_object(), "{}", Sent.State);
+	assert!(Sent.State["traffic"].is_object(), "{}", Sent.State);
+	assert!(Sent.State["route"].is_null(), "route is not a cruise dimension: {}", Sent.State);
+	assert!(Sent.Question["action"]["criteria"]["throttle"].is_string());
+}
+
+#[test]
+fn the_fourth_tick_carries_the_rotating_dimension() {
+	// Two consecutive sends differ by construction: the slow dimension arrives
+	// on a tick count, not when a caller remembers it.
+	let Car = At(45.0, 0.0);
+	let Scene = Witness::default().Observe(&Car, true);
+	let Third = ComposeSend(&Car, &Scene, None, 3);
+	let Fourth = ComposeSend(&Car, &Scene, None, 4);
+	assert_eq!(Third.Focus, "motion");
+	assert_eq!(Fourth.Focus, "route", "the rotation lands on the fourth tick");
+	assert!(Fourth.State["route"].is_object(), "{}", Fourth.State);
+	assert!(Third.State["route"].is_null(), "{}", Third.State);
+}
+
+#[test]
+fn a_route_on_screen_is_a_mission_asked_about_the_arrow() {
+	// The cue is the only thing that tells a mission from a cruise, so it is
+	// the only thing the mode reads to decide between them.
+	let Car = At(45.0, 0.0);
+	let Scene = Witness::default().Observe(&Car, true);
+	let Sent = ComposeSend(&Car, &Scene, Some(0.62), 1);
+	assert_eq!(Sent.Mode, Mode::Mission);
+	assert!(Sent.State["route"]["cue_x"].is_number(), "{}", Sent.State);
+	assert!(Sent.Question["action"]["criteria"]["steer_right"].is_string());
+}
+
+#[test]
+fn a_jammed_car_is_asked_which_way_out() {
+	let Car = At(46.0, 0.0);
+	let mut Watch = Witness::default();
+	let mut Scene = Watch.Observe(&Car, true);
+	for _ in 1..(Window + Insist) {
+		Scene = Watch.Observe(&Car, true);
+	}
+	let Sent = ComposeSend(&Car, &Scene, None, 1);
+	assert_eq!(Sent.Mode, Mode::Recover);
+	assert!(
+		Sent.Question["action"]["criteria"]["reverse_left"].is_string(),
+		"the escape has to be an option: {}",
+		Sent.Question
+	);
+}
+
+#[test]
+fn a_race_is_asked_about_pace_and_the_route() {
+	let Car = Car { RaceType:1, ..At(60.0, 0.0) };
+	let Scene = Witness::default().Observe(&Car, true);
+	let Sent = ComposeSend(&Car, &Scene, Some(0.4), 2);
+	assert_eq!(Sent.Mode, Mode::Race);
+	assert!(Sent.State["race"]["racetype"].is_number(), "{}", Sent.State);
+	assert!(Sent.Question["risk"].is_object(), "{}", Sent.Question);
 }
 
 #[test]
