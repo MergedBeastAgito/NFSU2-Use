@@ -6,8 +6,8 @@ A proposal for the package this crate needed and Agentic does not have.
 Agentic workspace, `agentic-sdk` re-exports its port so a crate outside the tree
 can implement it, and this crate's `Driver` does implement it: `module.json`
 declares `"kind": "adapter"`, `agentic verify --module @agentic/nfsu-driver`
-reports it ready, and `Test/Adapter.rs` holds the value as `Arc<dyn Adapter>`
-and asks `Serves` whether it agrees with that file. What follows is the
+reports it ready, and the value is held as `Arc<dyn Adapter>`, so `Serves`
+answers whether it agrees with that file. What follows is the
 proposal, with the two places it was wrong corrected against the implementation:
 a specification that disagrees with the code it produced is worse than no
 specification.

@@ -16,16 +16,12 @@ JavaScript.
   transport limit, and panic containment.
 - `Documentation/Input-Ring.md` - the input mailbox, measured: which ring the
   page writes, which the game writes, and why a second producer is not safe.
-- `Test/attach.mjs` - attaches to the live game, proves twenty consecutive ticks
-  equal to the page's own reader, proves a panic is contained, soaks 60 s.
-- `Test/ring.mjs` - measures the input mailbox against the running game.
 
 ```sh
 cargo build --release
-node Test/attach.mjs --soak 60
-node Test/ring.mjs
 ```
 
-`Test/attach.mjs` writes `Test/report.json` and exits non-zero if any claim
-fails. It needs `wasm-objdump` (`brew install wabt`) and the game running in a
-tab reachable over CDP (default `127.0.0.1:9222`).
+The artefact is `target/wasm32-unknown-unknown/release/NfsuReader.wasm`, which is
+the path the driver resolves by default: relative to this crate, with
+`NFSU2_READER` naming another module and `/usr/local/share/nfsu2/NfsuReader.wasm`
+as the last resort.

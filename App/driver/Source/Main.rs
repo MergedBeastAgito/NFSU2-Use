@@ -32,7 +32,7 @@
 use std::{sync::Arc, time::Duration};
 
 use AgenticLane::{Budget, DecidePort, Decider};
-use AgenticNfsuDriver::{Driver, OpenCorpus, Policy};
+use AgenticNfsuDriver::{Driver, OpenCorpus, Policy, ReaderWasm};
 use AgenticSDK::{Adapter, Browse, Call, Chrome, ChromeOptions, Clock, Create, Never, OpenOptions, Options, Tokio};
 
 /// One argument's value.
@@ -221,6 +221,11 @@ async fn main() -> Result<(), String> {
 		Arc::new(Tokio),
 		Options::default(),
 	));
+	// The reader's artefact, resolved by the same rule as the corpus and the
+	// dotenv file. Nothing in this run loads it - the tick reads through the
+	// page - so the line is there for the run that would, and for a trace that
+	// has to say which module was beside it.
+	println!("reader · {}", ReaderWasm().display());
 	let Page = Browser
 		.Open(&URL, OpenOptions::Existing(Endpoint, Bind, Bounded.clone()))
 		.await

@@ -21,9 +21,11 @@ memread.json
 memscan.json
 state.json
 
-# What the reader's own harnesses write when they run against this machine.
-App/reader/Test/report.json
-App/reader/Test/ring.json
+# Working captures: a research transcript is evidence that a conversation
+# happened, not repository content. The files stay on disk - they are read while
+# a decision is being made - and what a capture settles is written into
+# Documentation/ as prose.
+Documentation/Research/
 
 # Node
 node_modules/

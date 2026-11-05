@@ -23,12 +23,12 @@ the same one the extension lives in, on `127.0.0.1:9222`. There is nothing
 headless about it and nothing for a person to do:
 
 ```sh
-node Documentation/Workflow/ask.mjs --topic Acknowledgement
+node Documentation/Workflow/ask.mjs --topic <Topic>
 ```
 
-It reads `Documentation/Research/Acknowledgement.question.txt`, opens a tab,
-types the question into the composer, waits for the answer to finish, files
-`Documentation/Research/Acknowledgement.md`, and closes the tab again.
+It reads `Documentation/Research/<Topic>.question.txt`, opens a tab, types the
+question into the composer, waits for the answer to finish, files
+`Documentation/Research/<Topic>.md`, and closes the tab again.
 
 Nothing is focused and nothing is navigated away from: the tab is created with
 `Target.createTarget` and `background: true`, so the person's own tabs stay where
@@ -77,7 +77,8 @@ Two rules on the file:
   sales pitch: ask where the design is worse, what it costs, and what would make
   the model drop its own answer.
 
-`Documentation/Research/Acknowledgement.question.txt` is a worked example.
+The question is a file beside the capture it will produce, so the two are read
+together: `Documentation/Research/<Topic>.question.txt`.
 
 ---
 
@@ -104,22 +105,14 @@ exit code says which kind of failure it was, and each has one response:
 
 ---
 
-## The refusals are tested
+## What the refusals look like
 
-```sh
-node Documentation/Workflow/Test/run.mjs
-```
-
-Five fixture pages under `Documentation/Workflow/Test/` fail in exactly one way
-each - no composer, no Search/Computer toggle, a toggle that will not take a
-press, a question the page never accepts, an answer that never grows - and the
-suite asserts the exit code, the blocker line, and that nothing was filed (for the
-last, that only a `.partial` was). It runs against the same browser and sends
-nothing to the product, so it is safe to run before and after any change to the
-driver. Five of five cases pass in about 40 seconds.
-
-The happy path is not in the suite: it needs the real product and a logged-in
-profile, and it is the run above.
+Each way the page can fail has one blocker line and one exit code, so a run that
+stopped says which of them it hit rather than "it did not work". The modes the
+driver refuses - no composer, no Search/Computer toggle, a toggle that will not
+take a press, a question the page never accepts, an answer that never grows - are
+the five exit `3` and exit `4` cases in the table above, and each is reported
+before anything is filed.
 
 ---
 
@@ -169,9 +162,11 @@ rather than the date; the question stays beside it as `<Topic>.question.txt`. Th
 capture opens with `chars`, `mode`, `model`, `question` and `captured`, so the
 answer carries its own provenance.
 
-An answer that changes a design decision is summarised in the document that
-records the decision, with the research file **linked - never copied**, so there
-is one text and not two.
+That directory is a working area and git ignores it: the captures stay on disk,
+they are not repository content. What a capture settles is written into
+`Documentation/` as prose, and an answer that changes a design decision is
+summarised in the document that records the decision. A transcript is evidence
+that a conversation happened; the document is the decision itself.
 
 ---
 

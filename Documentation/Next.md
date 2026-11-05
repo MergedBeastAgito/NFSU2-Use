@@ -43,8 +43,8 @@ in `Templates/Questions.json`, not a flag.
 ## The reader is a crate, not a reader
 
 `App/reader` builds a 516-byte `cdylib` that reads the car from inside the game's
-own shared memory, and nothing in the driving path uses it. There is no built
-`.wasm` artifact, and the only loader is `Test/attach.mjs`.
+own shared memory, and nothing in the driving path uses it. The artifact is built
+and its path is resolved at startup, but no run instantiates it.
 
 The tick currently reads state through one `Evaluate` round trip of page-side
 JavaScript (`__readCar`). Wiring the wasm module would make a tick a handful of

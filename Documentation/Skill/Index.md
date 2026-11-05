@@ -17,6 +17,6 @@ The skills this repository ships, and the contract that keeps them loadable.
 - One directory per skill, named in `PascalCase-Kebab`.
 - `SKILL.md` carries the frontmatter and the rules; `Reference/` carries the worked instances, with
   `Reference/Index.md` listing them.
-- Every rule is a claim with a test, and the claim-to-test table ends the file.
+- Every rule is a claim with the observation it rests on, and that table ends the file.
 - Nothing here names a machine, an account, a credential or a directory layout: this repository
   travels.

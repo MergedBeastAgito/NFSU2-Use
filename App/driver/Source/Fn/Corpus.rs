@@ -51,41 +51,39 @@
 //! drives, on the rules alone, and says so. Nothing about a broken corpus can
 //! reach a tick.
 
-use std::{
-	env,
-	path::{Path, PathBuf},
-	sync::Arc,
-};
+use std::{env, path::PathBuf, sync::Arc};
 
 use AgenticLane::{Budget, Create, Decider, Load, Options, Rule, Rules, When};
 
-use crate::Fn::Poster::HTTP;
+use crate::Fn::{Location, Poster::HTTP};
 
 /// The corpus directory, relative to this crate.
 ///
 /// `App/driver` -> the repository root -> `Templates`. Relative rather than
 /// absolute because the repository is public and no tracked file may name a
-/// machine; `env!("CARGO_MANIFEST_DIR")` is expanded at build time and is a
-/// path into the clone that built the binary.
+/// machine: [`Location::Crate`] finds this crate from the running binary, so
+/// the path is resolved where the run happens rather than where the build did.
 pub const Relative:&str = "../../Templates";
 
 /// The variable that points a run at a corpus somewhere else.
 pub const Variable:&str = "NFSU2_CORPUS";
+
+/// The corpus an installation keeps outside the tree, used only when
+/// [`Relative`] is absent.
+pub const Absolute:&str = "/usr/local/share/nfsu2/Templates";
 
 /// The corpus directory a run reads: the argument, the environment, or the one
 /// beside this crate.
 ///
 /// The order is the caller's word first, because a corpus named on the command
 /// line is the corpus under test, and a fallback that won over it would be a
-/// run answering about files nobody asked for.
+/// run answering about files nobody asked for. The environment is the same word
+/// arriving by another route, and both are read from this crate when they are
+/// relative. The copy beside the crate is the default, and [`Absolute`] is the
+/// last resort - see [`Location`].
 pub fn Root(Given:Option<&str>) -> PathBuf {
-	if let Some(Given) = Given.filter(|Path| !Path.trim().is_empty()) {
-		return PathBuf::from(Given);
-	}
-	if let Some(Named) = env::var_os(Variable).filter(|Value| !Value.is_empty()) {
-		return PathBuf::from(Named);
-	}
-	Path::new(env!("CARGO_MANIFEST_DIR")).join(Relative)
+	let Named = Given.map(str::to_string).or_else(|| env::var(Variable).ok());
+	Location::Resolve(&Location::Crate(), Named.as_deref(), Relative, Absolute)
 }
 
 /// The template the drive lane asks when no route arrow is on screen.

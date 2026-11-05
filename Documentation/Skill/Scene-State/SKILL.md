@@ -147,15 +147,15 @@ What a question should carry:
 
 ---
 
-## Claim → test
+## Rule → what it rests on
 
-| claim | how it is checked |
+| rule | the observation behind it |
 | --- | --- |
-| wheel speed cannot say "blocked" | a car at 46 km/h with a fixed position: the verdict becomes `blocked` at `window + insist` ticks |
-| a moving car is never blocked | a car advancing 2.5 m a tick for 24 ticks stays `moving` |
-| a reverse is held, not tapped | an obeyed reverse sets the manoeuvre counter; the held ticks keep the side |
-| a manoeuvre ends in a turn | the last backing tick sets the turn, on the side the reverse used, with the throttle on |
-| the model may pick the side | a jammed scene plus `reverse_right` above the gate obeys and holds the right |
+| wheel speed cannot say "blocked" | a car at 46 km/h against a wall reports the same wheel speed as a car at 46 km/h on a road, while its position stops changing; six ticks of position separate the two |
+| a moving car is never blocked | 2.5 m a tick is 15 m over the window, ten times its 1.5 m threshold |
+| a reverse is held, not tapped | a 150 ms tap of the reverse key moved nothing; five ticks of it moved the car clear |
+| a manoeuvre ends in a turn | five ticks of reverse then ten of turn put a wedged car at 40 km/h in a new direction, where reverse alone alternated for 150 ticks without leaving |
+| the model may pick the side | the answer names the side, and the manoeuvre holds the side it was given rather than recomputing one |
 | the car list is the game's, not a scan | the walk starts at `World (0x00890080) +0` and ends when the node is the world again; `runtime/roam.c` `log_cars` is the reference |
 | traffic is a read, not a guess | a car 20 m ahead appears with its own speed and closing rate in the same tick, without a frame |
-| the question changes with the scene | the trace's `asked` field is `blocked` at a wall, `traffic` behind a car in lane, `open` otherwise |
+| the question changes with the scene | the trace's `asked` field reads `blocked` at a wall, `traffic` behind a car in lane, `open` otherwise |

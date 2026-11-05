@@ -108,8 +108,7 @@ a `f64` page compute the identical number from the same `u16`.
 **The consequence for a caller:** a full reading is six calls, and the game's
 physics runs on other threads, so the calls do not see one instant. A caller
 that needs a consistent snapshot reads the game twice and accepts only the ticks
-where both readings agree; `Test/attach.mjs` does exactly that and reports how
-many ticks it had to reject.
+where both readings agree.
 
 ---
 
@@ -118,22 +117,21 @@ many ticks it had to reject.
 `#[panic_handler]` calls `unreachable()`, and the crate is built with
 `panic = "abort"`. A panic is therefore a wasm trap: the page catches a
 `RuntimeError`, the module's other exports still work, and the game's own
-instance - a different module - never sees it. `panic_probe()` exists to prove
-that rather than assert it, and the harness calls it against the live game.
+instance - a different module - never sees it. `panic_probe()` exists so that
+the containment can be watched on a live game rather than taken on faith.
 
 ---
 
-## Build and verify
+## Build
 
 ```sh
 cargo build --release          # .cargo/config.toml carries the link flags
-node Test/attach.mjs --soak 60 # attach, 20 ticks, panic probe, 60 s soak
-node Test/ring.mjs             # measure the input mailbox (see Input-Ring.md)
 ```
 
 The build writes `target/wasm32-unknown-unknown/release/NfsuReader.wasm` (516
-bytes). The harness needs `wasm-objdump` (`brew install wabt`) and the game
-running in a tab that is reachable over CDP.
+bytes), which is the path the driver resolves by default: relative to
+`App/reader`, with `NFSU2_READER` naming another module and
+`/usr/local/share/nfsu2/NfsuReader.wasm` as the last resort.
 
 ---
 
@@ -146,20 +144,11 @@ join yet.
 
 ---
 
-## Claims and their probes
+## Reading the artefact
 
-- The module imports one shared memory and nothing else - `wasm-objdump -x` on
-  the artefact, `Import[1]`.
-- It cannot allocate or grow the game's memory -
-  `wasm-objdump -d | grep -c 'memory.grow'` is 0; `wasm-objdump -x` has no
-  allocation symbol.
-- It cannot write the game's memory - `wasm-objdump -d | grep -cE '\.store'` is
-  0; `wasm-objdump -h` has no `Data` section and `-x` no globals.
-- A stale pointer cannot trap - `Committed()` bounds every read against
-  `memory_size(0)`; the pointer chain is bounded at each step.
-- State read through wasm equals state read through the page's own reader -
-  `node Test/attach.mjs`, twenty consecutive ticks, each counted only when two
-  wasm readings and two JavaScript readings agree.
-- A panic cannot take the game down - the same harness calls `panic_probe()`
-  against the live game and re-reads the car afterwards.
-- The game survives attachment - the same harness, `--soak 60`.
+The properties above are visible in the module itself, which is what keeps them
+claims about this build rather than about the source: `wasm-objdump -x` shows one
+import and no globals, `-h` shows no `Data` section, and
+`wasm-objdump -d | grep -cE '\.store|memory.grow'` is 0. `Committed()` is the
+runtime half of the same statement - every read is bounded against
+`memory_size(0)` and the pointer chain is bounded at each step.

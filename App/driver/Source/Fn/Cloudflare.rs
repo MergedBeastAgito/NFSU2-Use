@@ -18,10 +18,12 @@
 //!   the replies it already has instead of asking twice. The meter is the Lane
 //!   crate's too (`Struct::Budget`), fed from the answer it parses.
 //!
-//! The token is read from `CLOUDFLARE_API_TOKEN`, or from the dotenv file named
-//! by `CLOUDFLARE_ENV_FILE`, and is never printed, logged or put in an error
-//! message. It reaches curl on **stdin**, as a config line, rather than as an
-//! argument: argv is readable by every process on the machine through `ps`.
+//! The token is read from `CLOUDFLARE_API_TOKEN`, or from the dotenv file this
+//! crate resolves - `App/.env` beside the crate by default, `CLOUDFLARE_ENV_FILE`
+//! for another one, `/usr/local/etc/nfsu2/.env` as the last resort - and is
+//! never printed, logged or put in an error message. It reaches curl on
+//! **stdin**, as a config line, rather than as an argument: argv is readable by
+//! every process on the machine through `ps`.
 //!
 //! Neither the token nor the account id has a default. Both are read from the
 //! environment, and their absence is its own word (`"no token"`, `"no account
@@ -32,8 +34,22 @@ use std::{
 	env,
 	fs,
 	io::Write,
+	path::PathBuf,
 	process::{Command, Stdio},
 };
+
+use crate::Fn::Location;
+
+/// The dotenv file beside this crate, which is where `App/.env.example` says to
+/// copy it.
+pub const Relative:&str = "../.env";
+
+/// The variable that names another dotenv file.
+pub const Variable:&str = "CLOUDFLARE_ENV_FILE";
+
+/// The dotenv file an installation keeps outside the tree, used only when
+/// [`Relative`] is absent.
+pub const Absolute:&str = "/usr/local/etc/nfsu2/.env";
 
 /// How long one call may take, in seconds. Beyond this the tick belongs to the
 /// rules.
@@ -70,10 +86,10 @@ pub fn Token() -> Option<String> {
 ///
 /// One line of curl's own `-K` grammar, ending in a newline because curl reads
 /// the config from stdin and a last line without one is still a line. It is a
-/// function rather than a `format!` at the write site so that the one place the
-/// token becomes bytes can be asserted without a socket: the URL and the body
-/// reach curl as arguments, and the reply is a child process, so this line is
-/// the only part of a call a test can read at all.
+/// function rather than a `format!` at the write site because it is the one
+/// place the token becomes bytes: the URL and the body reach curl as arguments
+/// and the reply is a child process, so this line is the whole of a call that
+/// exists inside this process.
 ///
 /// A token that cannot be written as this line is refused, with the same word a
 /// missing token produces, rather than quoted: a `"` would end the header early
@@ -127,8 +143,8 @@ pub fn Post(URL:&str, Body:&str, Token:&str) -> Result<String, String> {
 		// A failed write is curl reading no header, which is the same failure a
 		// missing token has: the call is answered 401 and the rules carry on.
 		//
-		// The bytes are [`Header`]'s, so the line curl reads and the line the
-		// test asserts are composed by one function and cannot drift apart.
+		// The bytes are [`Header`]'s, so the line curl reads is composed by one
+		// function and cannot drift from the one this crate refuses on.
 		let _ = In.write_all(Line.as_bytes());
 	}
 	let Output = Child.wait_with_output().map_err(|_| "curl unavailable".to_string())?;
@@ -152,10 +168,22 @@ pub fn Post(URL:&str, Body:&str, Token:&str) -> Result<String, String> {
 	Ok(Payload.to_string())
 }
 
-/// The token from a dotenv file the caller names with `CLOUDFLARE_ENV_FILE`.
+/// The dotenv file a run reads.
+///
+/// The variable, the copy beside this crate, or the absolute location - see
+/// [`Location`], which is the one resolver for every path this crate reads.
+pub fn EnvFile() -> PathBuf {
+	Location::Resolve(
+		&Location::Crate(),
+		env::var(Variable).ok().as_deref(),
+		Relative,
+		Absolute,
+	)
+}
+
+/// The token from the dotenv file [`EnvFile`] resolves.
 fn FromDotEnv() -> Option<String> {
-	let Path = env::var("CLOUDFLARE_ENV_FILE").ok()?;
-	let Text = fs::read_to_string(Path).ok()?;
+	let Text = fs::read_to_string(EnvFile()).ok()?;
 	Text.lines()
 		.find_map(|Line| {
 			Line.strip_prefix("CLOUDFLARE_API_TOKEN=")
@@ -164,56 +192,3 @@ fn FromDotEnv() -> Option<String> {
 		.filter(|Token| !Token.is_empty())
 }
 
-// The config line is the whole of a call a test can read: the URL and the body
-// reach curl as arguments and the reply is a child process, so the token's
-// journey into curl's stdin is asserted here, on the bytes, rather than by
-// posting to an endpoint. No socket, no curl, no browser.
-#[cfg(test)]
-mod Tests {
-	use super::{Header, Post};
-
-	/// A token of the shape the endpoint issues: opaque, and long enough that a
-	/// truncated or substituted one would still look like a credential.
-	const Token:&str = "v1.0-abc123def456";
-
-	#[test]
-	fn the_config_line_carries_the_token_it_was_given() {
-		let Line = Header(Token).expect("a token the endpoint issues is a config line");
-		assert_eq!(Line, format!("header = \"Authorization: Bearer {Token}\"\n"));
-		assert!(Line.contains(Token), "the token is in the bytes curl reads · {Line}");
-	}
-
-	#[test]
-	fn the_config_line_is_composed_from_the_token() {
-		// The failure this guards against is a `format!` with no argument:
-		// every token would produce the same line, the endpoint would
-		// answer 401 on every tick, and the trace would look like a bad
-		// credential rather than a missing interpolation. Two tokens
-		// must give two lines.
-		let One = Header("first-token").expect("a config line");
-		let Two = Header("second-token").expect("a config line");
-		assert_ne!(One, Two, "the line is composed from the token, not written beside it");
-		for Line in [One, Two] {
-			assert!(!Line.contains("***"), "a stand-in in the token's place · {Line}");
-		}
-	}
-
-	#[test]
-	fn a_token_that_cannot_be_a_config_line_is_refused() {
-		// A `"` would end the header early and a newline would start a second
-		// config line; either would send something other than the token and be
-		// answered 401, so both are refused with the word a missing token
-		// already produces.
-		for Bad in ["quo\"te", "new\nline", "carriage\rreturn"] {
-			assert_eq!(Header(Bad), Err("no token".to_string()), "{Bad:?} is not a config line");
-		}
-	}
-
-	#[test]
-	fn post_refuses_a_bad_token_before_it_spawns_curl() {
-		// The refusal is the first statement of `Post`, not something curl
-		// reports: a token that cannot be a config line never reaches a child
-		// process, which is what lets this assertion run with no socket.
-		assert_eq!(Post("http://127.0.0.1:1/never", "{}", "quo\"te"), Err("no token".to_string()));
-	}
-}

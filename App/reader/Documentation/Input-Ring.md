@@ -6,7 +6,7 @@ What a second writer would have to join if injection ever moved off
 Everything here is the port's own: `runtime/web/input_proto.h` is the struct the
 game compiles, `web/src/input/proto.ts` is the page's copy of the same numbers
 (`web/tools/check-proto.mjs` compares the two files), and the measurements are
-from the running game (`node Test/ring.mjs`).
+from the running game.
 
 ---
 

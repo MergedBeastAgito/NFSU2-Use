@@ -6,7 +6,9 @@ pub mod Corpus;
 pub mod Decide;
 pub mod Expressions;
 pub mod Gate;
+pub mod Location;
 pub mod Observe;
 pub mod Poster;
+pub mod Reader;
 
 pub use crate::Fn::{Cloudflare::Post, Decide::Decide as Policy, Expressions::*};

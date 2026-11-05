@@ -94,8 +94,10 @@ pub use crate::{
 		Decide::{BackTicks, Carry, Decide as DecideAction, TurnOutTicks},
 		Expressions::{Bootstrap, Cruise, Hold, Publish, Release, State},
 		Gate::Gate,
+		Location::{Crate as CrateRoot, Resolve as ResolvePath},
 		Observe::Observe,
 		Poster::HTTP,
+		Reader::Wasm as ReaderWasm,
 	},
 	Struct::{
 		Decision::{Action, Decision, Keys},

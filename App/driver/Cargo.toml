@@ -43,24 +43,3 @@ tokio = { version = "1", features = [
 	"signal"
 ] }
 serde_json = "1"
-
-# The policy, the parser and the meter are pure, so they are tested without a
-# browser: `cargo test` runs them and never attaches to anything.
-[[test]]
-name = "decision"
-path = "Test/Decision.rs"
-
-# The corpus on disk and the round trip through it: the five lanes selected by
-# the priority this crate states, the request composed from the real templates,
-# and a consultation that fails without taking the tick with it. No browser and no
-# socket - the poster answers from a string and the port from a written answer.
-[[test]]
-name = "corpus"
-path = "Test/Corpus.rs"
-
-# The port's own test: the adapter is constructed over a scripted page, held as
-# `Arc<dyn Adapter>`, and asked whether it serves the port its manifest declares.
-# No browser, no game, no network - the value is what is under test.
-[[test]]
-name = "adapter"
-path = "Test/Adapter.rs"

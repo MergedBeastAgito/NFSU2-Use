@@ -46,14 +46,11 @@ App/                        the application: what runs
     Source/Library.rs       the module - no_std, no allocator, no stores
     .cargo/config.toml      the link flags, and why each is required
     Documentation/          the import contract, the offsets, the input mailbox
-    Test/attach.mjs         attach, twenty ticks, panic probe, soak
-    Test/ring.mjs           measure the input mailbox against the running game
   nfsu-drive4.mjs           the JS driver: duty-cycle steering, hysteretic throttle
   nfsu-gui4.mjs             HUD, observations, decisions, power and pipe switches
   nfsu-lane.mjs             the pipeline lane: SEND → RECEIVE → APPLIED → TRACE
   nfsu-bus.mjs              in-page tables and subscriptions (no .jsonl)
   analyze_frame.py          arrow detection and road-band motion
-  reader/                   a wasm module that reads the car from inside the game's memory
 
 Templates/                  data, read at runtime - never compiled in
   Observation.json          every field we can send, with its source address
@@ -63,10 +60,11 @@ Templates/                  data, read at runtime - never compiled in
 Documentation/
   StateCharts.md            the tick, the send/receive contract, the pipe into the game
   Vision.md                 why the schema is the product and NFSU2 is the unit test
-  Research/                 one capture per Perplexity thread, with its question beside it
+  Design.md                 what the research settled: the envelope, the tiers, the
+                            protocol, and where the design is still uncertain
+  Memory.md                 the memory map, every address named by the port's source
   Workflow/                 how a card asks rather than guesses: Research.md is the
-                            procedure, ask.mjs the driver, Test/ the fixtures that
-                            prove its refusals
+                            procedure and ask.mjs the driver
 ```
 
 ---
@@ -86,12 +84,11 @@ instantiates beside the game's own, importing the game's shared memory.
 
 ```sh
 cd reader && cargo build --release          # .cargo/config.toml carries the link flags
-node Test/attach.mjs --soak 60              # attach, 20 ticks, panic probe, soak
-node Test/ring.mjs                          # measure the input mailbox
 ```
 
-The harnesses need `wasm-objdump` (`brew install wabt`) and the game running in a
-tab reachable over CDP.
+Three paths a run reads are resolved the same way - relative to the crate, then
+the environment, then one absolute location: the corpus (`NFSU2_CORPUS`), the
+dotenv file (`CLOUDFLARE_ENV_FILE`) and the reader's module (`NFSU2_READER`).
 
 The JavaScript harness is installed into the page, not run by it:
 
@@ -121,9 +118,10 @@ One measured call: `action: throttle` at 0.5348, confidence 2.12 of 3, 343 input
 tokens and no output tokens - about $0.000013, which is why advice is throttled
 by `--every` rather than asked for on every tick.
 
-The token is read from `CLOUDFLARE_API_TOKEN`, or from the dotenv file named by
-`CLOUDFLARE_ENV_FILE`, and is never printed. The account id has no default
-either: `CLOUDFLARE_ACCOUNT_ID` is required, because a hard-coded one would ship
+The token is read from `CLOUDFLARE_API_TOKEN`, or from a dotenv file -
+`App/.env` beside the crate by default, `CLOUDFLARE_ENV_FILE` for another one -
+and is never printed. The account id has no default either:
+`CLOUDFLARE_ACCOUNT_ID` is required, because a hard-coded one would ship
 somebody's account in a public repository.
 
 ---

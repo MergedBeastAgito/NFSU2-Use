@@ -102,8 +102,8 @@ impl Keys {
 	/// order it asserts them.
 	///
 	/// The names live here and only here: the adapter loops over this array
-	/// instead of naming the four keys itself, so what a test asserts is the
-	/// set the page is actually sent.
+	/// instead of naming the four keys itself, so the set this value carries
+	/// is the set the page is actually sent.
 	pub const fn Pairs(self) -> [(&'static str, bool); 4] {
 		[
 			("ArrowUp", self.Throttle),
