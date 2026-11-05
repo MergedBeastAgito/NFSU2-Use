@@ -192,9 +192,10 @@ async fn one_call_reads_the_state_and_answers_it() {
 	assert_eq!(Answer["decision"]["action"], "cruise", "{Answer}");
 	assert_eq!(Answer["decision"]["advised"], false, "{Answer}");
 
-	// The five expressions, in the order the call path has always used them:
-	// the page-side driver is installed by the first call, then one read,
-	// four keys, one paint.
+	// Four expressions, in the order the call path uses them: the page-side
+	// driver is installed by the first call, then one read, one goal, one
+	// paint. The goal is the fast loop's only input - the keys are the page's
+	// business now, applied at frame rate rather than once a tick.
 	let Sent = Page.Sent();
 	assert_eq!(
 		Sent.first().map(String::as_str),
@@ -202,10 +203,10 @@ async fn one_call_reads_the_state_and_answers_it() {
 		"{Sent:?}"
 	);
 	assert_eq!(Sent.get(1).map(String::as_str), Some(State()), "{Sent:?}");
-	assert_eq!(Sent.len(), 7, "bootstrap, state, four keys and a publish: {Sent:?}");
+	assert_eq!(Sent.len(), 4, "bootstrap, state, a cruise goal and a publish: {Sent:?}");
 	assert!(
-		Sent.iter().any(|One| One == &AgenticNfsuDriver::Hold("ArrowUp", true)),
-		"{Sent:?}"
+		Sent.iter().any(|One| One == &AgenticNfsuDriver::Cruise(true, 45.0, 0.0)),
+		"the goal is written once a tick: {Sent:?}"
 	);
 }
 

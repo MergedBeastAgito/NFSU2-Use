@@ -214,6 +214,29 @@ a card ends up waiting for an answer nobody was asked for.
 
 ---
 
+## Formatting a capture
+
+A raw capture is the accessibility tree: the sidebar, the account name, the mode
+buttons and the follow-up chips are all in it, and none of it is the answer.
+Every capture is formatted before it is kept:
+
+```sh
+~/.hermes/venvs/skills-python/bin/python \
+  ../Agentic/Scripts/FormatResearch.py \
+  Documentation/Research/<Topic>.md \
+  --thread <thread-id> --title "<title>" --project DELO --steps <n>
+```
+
+The formatter lives in Agentic, not in the example: it is a house tool for every
+capture, so it belongs where every agent already looks.
+
+It writes YAML frontmatter (title, thread, project, kind, date, status, source,
+captured, segments, steps, sources), a metadata table, and a `## Transcript` with
+the chrome stripped - the shape the Agentic workspace's own `.hermes/research/*.md`
+files use, so the corpus reads as one thing rather than thirteen captures.
+
+---
+
 ## If the page changes
 
 The driver reads the composer, the toggle group (`[data-command-menu-control]`),

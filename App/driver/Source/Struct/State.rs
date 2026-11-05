@@ -33,6 +33,8 @@ pub struct Car {
 	pub CareerRace:u32,
 	/// The track id: 4000 is the free-roam city.
 	pub Track:u32,
+	/// The race type: 0 free roam, 1 a race, 7 an outrun, 8 the Dyno Shop.
+	pub RaceType:u32,
 }
 
 /// Another car, as the traffic list holds it.
@@ -126,6 +128,7 @@ impl Car {
 			Flow:Value.get("flow").and_then(Value::as_u64).unwrap_or(0) as u32,
 			CareerRace:Value.get("career_race").and_then(Value::as_u64).unwrap_or(0) as u32,
 			Track:Value.get("track").and_then(Value::as_u64).unwrap_or(0) as u32,
+			RaceType:Value.get("racetype").and_then(Value::as_u64).unwrap_or(0) as u32,
 		})
 	}
 

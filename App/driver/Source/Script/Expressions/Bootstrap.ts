@@ -104,6 +104,7 @@
 				flow: u32(0x008654a4),
 				career_race: u32(0x00863470),
 				track: u32(0x0089e7a0),
+				racetype: u32(0x0089e7b0),
 				traffic: Traffic.slice(0, 6),
 			};
 		},
@@ -125,6 +126,42 @@
 				delete Held[Key];
 				window.__nfsu2.session.input.key(Key, false);
 			}
+		},
+		// The fast loop's state: a speed to hold and a steering bias. Written
+		// once a tick by the driver, applied every 16 ms here, so the keys
+		// follow the goal at frame rate rather than at the tick rate.
+		goal: { on: false, kmh: 0, bias: 0 },
+		drive: 0,
+		cruise(On, Kmh, Bias) {
+			const D = window.__drv;
+			D.goal = { on: !!On, kmh: Number(Kmh) || 0, bias: Number(Bias) || 0 };
+			if (!On) {
+				if (D.drive) {
+					clearInterval(D.drive);
+					D.drive = 0;
+				}
+				D.releaseAll();
+				return;
+			}
+			if (D.drive) return;
+			let Phase = 0;
+			D.drive = setInterval(() => {
+				const G = D.goal;
+				if (!G.on) return;
+				const S = D.state();
+				if (!S || !S.car) return;
+				// Throttle: hold under the target, brake above it, leave the
+				// key alone in between - a bang-bang loop with a deadband is
+				// what a programmatic cruise is.
+				D.hold("ArrowUp", S.kmh < G.kmh - 2);
+				D.hold("ArrowDown", S.kmh > G.kmh + 8);
+				// Steering: a duty cycle of a 110 ms window on the bias's sign.
+				Phase = (Phase + 16) % 110;
+				const Duty = Math.min(1, Math.abs(G.bias));
+				const Now = Duty > 0.05 && Phase < 110 * Duty;
+				D.hold("ArrowLeft", Now && G.bias < 0);
+				D.hold("ArrowRight", Now && G.bias > 0);
+			}, 16);
 		},
 		publish(Payload) {
 			const Debug = window.__hermesDebug;

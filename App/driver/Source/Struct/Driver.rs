@@ -228,7 +228,7 @@ impl Driver {
 			if Meter.Allows() {
 				// A failed call is not a decision: the rules already made one,
 				// and the meter records why the model is not in it.
-				match AdviseCloudflare(&Car, &Scene, Policy.Cue, Name) {
+				match AdviseCloudflare(&Car, &Scene, Policy.Cue, Tick, Name) {
 					Ok(Advice) => {
 						Meter.Charge(Advice.Input, Advice.Output);
 						Asked = Advice.Asked;
@@ -252,21 +252,40 @@ impl Driver {
 		// side and the rules hold it for the same handful of ticks a stall
 		// escape gets, or a 150 ms tap of the reverse key would move the car
 		// nothing at all and the next tick would drive it back into the wall.
+		//
+		// It may not *extend* the manoeuvre: a model asked every sixth tick
+		// answers "reverse" every sixth tick, and a counter reset by each answer
+		// never drains - the car reverses into the same corner until the run
+		// ends. An answer during a manoeuvre chooses the side; only the rules
+		// start one.
 		if Decision.Obeyed && Decision.Action.Reversing() {
 			let mut Guard = Lock(&self.Run);
-			Guard.Carry.Back = BackTicks;
 			Guard.Carry.Held = Some(Decision.Action);
-			Guard.Carry.Reversals += 1;
+			if Guard.Carry.Back == 0 {
+				Guard.Carry.Back = BackTicks;
+				Guard.Carry.Reversals += 1;
+			}
 		}
 		// What the car will have felt by the next read.
 		Lock(&self.Run).Throttle = Decision.Throttle;
 
-		// The keys come from the decision as one set, never from a switch of
-		// this file's own: a reverse tick holds the reverse key and a steering
-		// key, and a loop here that named the keys itself would be a second
-		// opinion about what the decision meant.
-		for (Key, On) in Decision.Keys().Pairs() {
-			self.Evaluate(&Expressions::Hold(Key, On), Bounded.clone()).await?;
+		// A manoeuvre drives keys; everything else is a goal the page applies at
+		// frame rate. That is the split the design rests on: an escape is a
+		// sequence of keys, a cruise is a setpoint - and a setpoint survives a
+		// slow round trip in a way a keypress does not.
+		if Manoeuvre {
+			self.Evaluate(&Expressions::Cruise(false, 0.0, 0.0), Bounded.clone()).await?;
+			for (Key, On) in Decision.Keys().Pairs() {
+				self.Evaluate(&Expressions::Hold(Key, On), Bounded.clone()).await?;
+			}
+		} else {
+			let Bias = match Decision.Action {
+				crate::Struct::Decision::Action::SteerLeft => -Decision.Duty,
+				crate::Struct::Decision::Action::SteerRight => Decision.Duty,
+				_ => 0.0,
+			};
+			let Kmh = if Decision.Throttle { Policy.TargetKmh } else { 0.0 };
+			self.Evaluate(&Expressions::Cruise(true, Kmh, Bias), Bounded.clone()).await?;
 		}
 
 		let Payload = json!({
@@ -283,6 +302,7 @@ impl Driver {
 				"sentence": Scene.Sentence
 			},
 			"asked": Asked,
+			"mode": crate::Struct::Mode::Mode::Of(&Car, &Scene, Policy.Cue).Name(),
 			"decision": {
 				"action": Decision.Action.Name(),
 				"ms": (Decision.Duty * 100.0).round(),

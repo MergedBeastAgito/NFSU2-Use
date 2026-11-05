@@ -32,7 +32,7 @@ use std::{
 	process::{Command, Stdio},
 };
 
-use serde_json::{Value, json};
+use serde_json::json;
 
 use crate::Struct::{Situation::Situation, State::Car};
 
@@ -156,12 +156,11 @@ pub fn Parse(Body:&str) -> Result<Advice, Fail> {
 
 /// Ask a model what it would do. `Err` on any failure.
 ///
-/// The state is the scene, not the dashboard: the wheel speed is one field of
-/// nine, and the sentence beside it says what the nine add up to. The questions
-/// change with it - an open road is asked about pace and steering, a jammed car
-/// is asked which way out - because the same five options asked at a wall are a
-/// question whose answer is always `throttle`.
-pub fn Advise(Car:&Car, Scene:&Situation, Cue:Option<f64>, Name:&str) -> Result<Advice, Fail> {
+/// The state is composed, not listed: [`Send::Compose`] picks the dimensions the
+/// mode carries and the question that reads them, and rotates one slow
+/// dimension so two consecutive sends differ. This module's only business is
+/// the wire - the token, the curl, the parse, the meter.
+pub fn Advise(Car:&Car, Scene:&Situation, Cue:Option<f64>, Tick:u32, Name:&str) -> Result<Advice, Fail> {
 	let Bare = Resolve(Name);
 	let Token = env::var("CLOUDFLARE_API_TOKEN")
 		.ok()
@@ -170,120 +169,15 @@ pub fn Advise(Car:&Car, Scene:&Situation, Cue:Option<f64>, Name:&str) -> Result<
 		.ok_or(Fail::NoToken)?;
 	let Account = env::var("CLOUDFLARE_ACCOUNT_ID").map_err(|_| Fail::NoAccount)?;
 	let URL = format!("https://api.cloudflare.com/client/v4/accounts/{Account}/ai/run/@cf/cloudflare/{Bare}");
-	let State = json!({
-		"verdict": Scene.Word,
-		"situation": Scene.Sentence,
-		"speed_kmh": Car.Kmh.round(),
-		"gear": Car.Gear,
-		"heading_degrees": Car.Heading,
-		"route_cue_x": Cue,
-		"moved_m": Scene.Moved,
-		"turned_degrees": Scene.Turned,
-		"blocked_ticks": Scene.Blocked,
-		// The car ahead, when the world's list has one: the gap, its speed and
-		// the rate the gap is changing, all read from the game's own struct.
-		"lead_m": Scene.Lead.as_ref().map(|One| One.Distance.round()),
-		"lead_kmh": Scene.Lead.as_ref().map(|One| One.Kmh.round()),
-		"lead_closing_kmh": Scene.Lead.as_ref().map(|One| One.Closing.round()),
-		"lead_in_lane": Scene.Lead.as_ref().map(|One| One.Front() && One.InPath()),
-		"lead_kind": Scene.Lead.as_ref().map(|One| One.Kind()),
-	});
-	let (Asked, Questions) = Questions(Scene);
+	let Send = crate::Fn::Send::Compose(Car, Scene, Cue, Tick);
 	let Body = json!({
 		"model": Bare,
-		"state": State,
-		"questions": Questions,
+		"state": Send.State,
+		"questions": Send.Question,
 	});
 	let mut Answer = Parse(&Ask(&URL, &Body.to_string(), &Token)?)?;
-	Answer.Asked = Asked;
+	Answer.Asked = crate::Fn::Send::Asked(Send.Mode, Scene);
 	Ok(Answer)
-}
-
-/// The questions this tick asks, which the scene decides.
-///
-/// Two shapes and no more. A jammed car is asked which way out, with reversing
-/// written out as an option and said plainly to be the way a car leaves a wall;
-/// an open road is asked about pace and steering, because reversing there would
-/// undo progress the car has already made. Every option is one the gate can
-/// perform - an option the driver has no key for is a question that cannot be
-/// answered, however well the model understands it.
-fn Questions(Scene:&Situation) -> (&'static str, Value) {
-	if Scene.Jammed() {
-		return (
-			"blocked",
-			json!({
-			"action": {
-				"type": "choice",
-				"instructions": "The car cannot make progress where it is pointing: the situation field says what it is against, and moved_m is how far it has actually travelled while the throttle was held. Reversing with the wheel turned is how a car leaves a wall; pushing forward again only presses it back into what it hit. Which way should the car go?",
-				"criteria": {
-					"reverse_left": "Back out with the wheel turned left: the way out is behind and to the left",
-					"reverse_right": "Back out with the wheel turned right: the way out is behind and to the right",
-					"steer_left": "Turn the wheel left and keep pushing forward",
-					"steer_right": "Turn the wheel right and keep pushing forward",
-					"throttle": "Hold the throttle down and wait for the car to come free",
-					"brake": "Stop and give up on this direction"
-				}
-			},
-			"confidence": {
-				"type": "score",
-				"instructions": "How sure are you of that way out?",
-				"criteria": ["guessing", "unsure", "fairly sure", "certain"]
-			}
-			}),
-		);
-	}
-	// A car close ahead in our lane. Ghost mode means it cannot be hit, so this
-	// is not a hazard question - it is a question about the road, and the
-	// numbers are real: the gap in metres, the other car's speed, and the rate
-	// the gap is changing.
-	if let Some(One) = &Scene.Lead
-		&& One.Front()
-		&& One.InPath()
-		&& One.Distance < 60.0
-	{
-		return (
-			"traffic",
-			json!({
-				"action": {
-					"type": "choice",
-					"instructions": "Another car is ahead in your lane: lead_m is the distance to it, lead_kmh its speed, lead_closing_kmh the rate the gap is changing (positive is closing, negative is pulling away), and lead_kind what the game calls it. Ghost mode is on, so contact cannot happen - this is a question about the line and the pace, not about survival. What should the driver do?",
-					"criteria": {
-						"throttle": "Hold the pace and follow it",
-						"brake": "Drop back and give it room",
-						"hold": "Lift off and let the gap settle",
-						"steer_left": "Move to the left of it",
-						"steer_right": "Move to the right of it"
-					}
-				},
-				"confidence": {
-					"type": "score",
-					"instructions": "How sure are you of that?",
-					"criteria": ["guessing", "unsure", "fairly sure", "certain"]
-				}
-			}),
-		);
-	}
-	(
-		"open",
-		json!({
-		"action": {
-			"type": "choice",
-			"instructions": "The car is moving on a city road in free roam, with ghost mode on so other cars cannot be hit. route_cue_x is the route arrow's screen position when one is visible - 0.0 far left, 0.5 dead ahead, 1.0 far right - and null when there is no arrow. What should the driver do next?",
-			"criteria": {
-				"steer_left": "Turn toward the left of the road",
-				"steer_right": "Turn toward the right of the road",
-				"throttle": "Hold the line and keep the throttle down",
-				"brake": "Slow down",
-				"hold": "Do nothing and coast"
-			}
-		},
-		"confidence": {
-			"type": "score",
-			"instructions": "How sure are you of that action?",
-			"criteria": ["guessing", "unsure", "fairly sure", "certain"]
-		}
-		}),
-	)
 }
 
 /// One POST, with the token on stdin.

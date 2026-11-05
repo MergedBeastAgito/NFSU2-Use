@@ -43,13 +43,15 @@ pub use crate::{
 	Fn::{
 		Cloudflare::{Advice, Advise as AdviseCloudflare, Fail, Parse as ParseAdvice},
 		Decide::{BackTicks, Carry, Decide as DecideAction, TurnOutTicks},
-		Expressions::{Bootstrap, Hold, Publish, Release, State},
+		Expressions::{Bootstrap, Cruise, Hold, Publish, Release, State},
 		Gate::Gate,
+		Send::{Compose as ComposeSend, Send},
 	},
 	Struct::{
 		Budget::Budget,
 		Decision::{Action, Decision, Keys},
 		Driver::Driver,
+		Mode::Mode,
 		Policy::Policy,
 		Situation::{Insist, Situation, Window, Witness},
 		State::{Car, Lead},

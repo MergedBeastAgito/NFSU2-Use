@@ -167,7 +167,13 @@ impl Witness {
 	/// doing, and what is in front of it. A model told only the first drives
 	/// into the second.
 	fn Sentence(&self, Word:&str, Car:&Car) -> String {
-		format!("{}{}", self.Motion(Word, Car), Traffic(Car))
+		let Motion = self.Motion(Word, Car);
+		let Ahead = Traffic(Car);
+		if Ahead.is_empty() {
+			format!("{Motion}.")
+		} else {
+			format!("{Motion}. {Ahead}")
+		}
 	}
 
 	/// What the car itself is doing.
@@ -229,9 +235,9 @@ fn Round(Value:f64) -> f64 { (Value * 10.0).round() / 10.0 }
 /// values, read from the same struct the player's car uses.
 fn Traffic(Car:&Car) -> String {
 	match Car.Lead() {
-		None => " The road ahead is clear for at least 150 m.".to_string(),
+		None => "The road ahead is clear for at least 150 m.".to_string(),
 		Some(One) if !One.Front() => {
-			format!(" The nearest car is {:.0} m behind, at {:.0} km/h.", One.Distance, One.Kmh)
+			format!("The nearest car is {:.0} m behind, at {:.0} km/h.", One.Distance, One.Kmh)
 		},
 		Some(One) => {
 			let Lane = if One.InPath() { "in our lane" } else { "in another lane" };
@@ -251,7 +257,7 @@ fn Traffic(Car:&Car) -> String {
 				format!("{} ({})", One.Kind(), One.Name)
 			};
 			format!(
-				" The nearest car is {:.0} m ahead, {Lane}, {What} doing {:.0} km/h{Gap}.",
+				"The nearest car is {:.0} m ahead, {Lane}, {What} doing {:.0} km/h{Gap}.",
 				One.Distance, One.Kmh
 			)
 		},

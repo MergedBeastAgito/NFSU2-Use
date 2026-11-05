@@ -27,6 +27,16 @@ pub fn Hold(Key:&str, On:bool) -> String {
 	script!("Expressions/Hold"; Key = Key, On = if On { "true" } else { "false" })
 }
 
+/// Set the cruise goal: the speed to hold and the steering bias to lean on.
+pub fn Cruise(On:bool, Kmh:f64, Bias:f64) -> String {
+	script!(
+		"Expressions/Cruise";
+		On = if On { "true" } else { "false" },
+		Kmh = format!("{Kmh:.1}"),
+		Bias = format!("{Bias:.3}")
+	)
+}
+
 /// Show the decision on the overlay.
 pub fn Publish(Payload:&str) -> String { script!("Expressions/Publish"; Payload = Payload) }
 
