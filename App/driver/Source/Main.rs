@@ -36,6 +36,22 @@ fn Arg(Name:&str) -> Option<String> {
 		.cloned()
 }
 
+/// Say so when a task panics.
+///
+/// A panic inside a spawned task is silent by default: the task dies, whatever
+/// it was serving stays open, and every call that waits on it waits out its own
+/// deadline - so a crashed connection and a slow page are reported with the same
+/// word. This hook is one line on stderr, before that misreport.
+fn WatchPanics() {
+	std::panic::set_hook(Box::new(|Info| {
+		let Where = Info
+			.location()
+			.map(|At| format!("{At}"))
+			.unwrap_or_else(|| "an unknown place".into());
+		eprintln!("panic at {Where}: {Info}");
+	}));
+}
+
 /// One argument's value, parsed, or the default.
 fn Number<T:std::str::FromStr>(Name:&str, Default:T) -> T {
 	Arg(Name).and_then(|Value| Value.parse().ok()).unwrap_or(Default)
@@ -70,16 +86,27 @@ fn Show(Answer:&serde_json::Value) -> String {
 	)
 }
 
+/// How long one tick may take before it is the caller's failure rather than the
+/// page's.
+///
+/// Per call, never for the run: a [`Call`] fixes its deadline when it is built,
+/// so a run that reused one would find every tick after the first half-minute
+/// already expired - reported as a page that never answered, on a page that
+/// answered in a millisecond. That is the shape of the bug this constant's
+/// placement exists to prevent.
+const TickSpan:Duration = Duration::from_secs(30);
+
 /// Drive until the run is done, the adapter fails, or the caller interrupts.
 ///
 /// The port is the argument and nothing else about the adapter is known here:
 /// one call is one tick, and how many ticks a run takes is this loop's
 /// business.
-async fn Run(Port:&Arc<dyn Adapter>, Request:&str, Ticks:u32, Interval:u64, Bounded:Call) -> Result<(), String> {
+async fn Run(Port:&Arc<dyn Adapter>, Request:&str, Ticks:u32, Interval:u64) -> Result<(), String> {
 	let mut Tick = 0u32;
 	loop {
+		let Bounded = Call::Within(TickSpan, &Tokio, Arc::new(Never));
 		let Answer = Port
-			.Call(Request, Bounded.clone())
+			.Call(Request, Bounded)
 			.await
 			.map_err(|Why| format!("{}: {}", Why.Code(), Why.Message()))?;
 		Tick += 1;
@@ -93,6 +120,7 @@ async fn Run(Port:&Arc<dyn Adapter>, Request:&str, Ticks:u32, Interval:u64, Boun
 
 #[tokio::main]
 async fn main() -> Result<(), String> {
+	WatchPanics();
 	let Endpoint = Arg("--attach").ok_or("--attach <ws-url> is required")?;
 	let Bind = Arg("--bind").ok_or("--bind <target-id> is required")?;
 	let URL = Arg("--url").unwrap_or_else(|| "https://nfsu2.xyz/".into());
@@ -146,7 +174,7 @@ async fn main() -> Result<(), String> {
 	// the process that set it, so the adapter is released on both paths and the
 	// budget is printed on both.
 	let Outcome = tokio::select! {
-		Outcome = Run(&Held, &Request, Ticks, Interval, Bounded) => Outcome,
+		Outcome = Run(&Held, &Request, Ticks, Interval) => Outcome,
 		_ = tokio::signal::ctrl_c() => {
 			println!("interrupted");
 			Ok(())

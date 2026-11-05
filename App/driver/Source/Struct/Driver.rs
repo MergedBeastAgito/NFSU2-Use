@@ -198,7 +198,7 @@ impl Driver {
 		// The counters are read and written in one scope, before any await: a
 		// guard held across one would make the future `!Send` and the port
 		// unusable from a spawned task.
-		let (Tick, mut Decision, Scene) = {
+		let (Tick, mut Decision, Scene, Manoeuvre) = {
 			let mut Guard = Lock(&self.Run);
 			// One reborrow of the whole struct: two field borrows through the
 			// guard itself would be two mutable borrows of the guard.
@@ -210,7 +210,11 @@ impl Driver {
 			// nor a single position read can say so.
 			let Scene = Run.Witness.Observe(&Car, Run.Throttle);
 			let Decision = DecideAction(&Car, &Scene, Policy.Cue, Policy.TargetKmh, &mut Run.Carry);
-			(Run.Tick, Decision, Scene)
+			// Whether a manoeuvre is under way, which the gate needs: an
+			// opinion that arrives halfway through an escape would drive the
+			// car back into the thing it is leaving.
+			let Manoeuvre = Run.Carry.Back > 0 || Run.Carry.Turning > 0;
+			(Run.Tick, Decision, Scene, Manoeuvre)
 		};
 
 		if let Some(Name) = &Policy.Model
@@ -223,7 +227,7 @@ impl Driver {
 				match AdviseCloudflare(&Car, &Scene, Policy.Cue, Name) {
 					Ok(Advice) => {
 						Meter.Charge(Advice.Input, Advice.Output);
-						Decision = Gate::New(Policy.Threshold).Apply(Decision, &Advice, &Car, &Scene, Policy.TargetKmh);
+						Decision = Gate::New(Policy.Threshold).Apply(Decision, &Advice, &Car, &Scene, Manoeuvre, Policy.TargetKmh);
 					},
 					Err(Why) => Meter.Miss(Why.Why()),
 				}

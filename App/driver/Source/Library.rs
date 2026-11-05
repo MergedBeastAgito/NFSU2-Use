@@ -42,7 +42,7 @@ pub mod Struct;
 pub use crate::{
 	Fn::{
 		Cloudflare::{Advice, Advise as AdviseCloudflare, Fail, Parse as ParseAdvice},
-		Decide::{BackTicks, Carry, Decide as DecideAction},
+		Decide::{BackTicks, Carry, Decide as DecideAction, TurnOutTicks},
 		Expressions::{Bootstrap, Hold, Publish, Release, State},
 		Gate::Gate,
 	},

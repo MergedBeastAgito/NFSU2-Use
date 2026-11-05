@@ -8,7 +8,7 @@
 
 use AgenticNfsuDriver::{
 	Action, Advice, Budget, Car, Carry, DecideAction, Decision, Fail, Gate, Insist, ParseAdvice,
-	Situation, Window, Witness,
+	Situation, TurnOutTicks, Window, Witness,
 };
 
 /// A car doing 42 km/h: under the 45 target, so the throttle is expected on.
@@ -103,6 +103,13 @@ fn the_stall_rule_takes_a_side_and_the_other_one_next_time() {
 	let mut Watch = Witness::default();
 	let mut Sides = Vec::new();
 	for _ in 0..2 {
+		// Let any manoeuvre from the previous escape finish first: the rule
+		// under test is the stall, and a car still turning out of one wall is
+		// not a car arriving at the next.
+		while Carry.Back > 0 || Carry.Turning > 0 {
+			let Scene = Watch.Observe(&Stuck(), false);
+			let _ = DecideAction(&Stuck(), &Scene, None, 40.0, &mut Carry);
+		}
 		let Stall = (0..3)
 			.map(|_| {
 				let Scene = Watch.Observe(&Stuck(), false);
@@ -203,7 +210,7 @@ fn a_tick_holds_the_four_keys_the_page_is_sent() {
 
 #[test]
 fn gate_keeps_the_rules_below_the_threshold() {
-	let Decision = Gate::New(0.5).Apply(Rules(), &Said("steer_right", 0.49, 0.9), &Driving(), &Clear(), 45.0);
+	let Decision = Gate::New(0.5).Apply(Rules(), &Said("steer_right", 0.49, 0.9), &Driving(), &Clear(), false, 45.0);
 	assert_eq!(Decision.Action, Action::SteerLeft);
 	assert!(!Decision.Obeyed);
 	// Recorded, not obeyed: the numbers still reach the overlay.
@@ -215,7 +222,7 @@ fn gate_keeps_the_rules_below_the_threshold() {
 
 #[test]
 fn gate_obeys_at_exactly_the_threshold() {
-	let Decision = Gate::New(0.5).Apply(Rules(), &Said("steer_right", 0.5, 0.1), &Driving(), &Clear(), 45.0);
+	let Decision = Gate::New(0.5).Apply(Rules(), &Said("steer_right", 0.5, 0.1), &Driving(), &Clear(), false, 45.0);
 	assert_eq!(Decision.Action, Action::SteerRight);
 	assert!(Decision.Obeyed);
 	assert!(Decision.Reason.contains("obeyed"), "{}", Decision.Reason);
@@ -226,7 +233,7 @@ fn gate_obeys_at_exactly_the_threshold() {
 
 #[test]
 fn gate_refuses_an_option_the_driver_cannot_perform() {
-	let Decision = Gate::New(0.5).Apply(Rules(), &Said("wheelie", 0.99, 1.0), &Driving(), &Clear(), 45.0);
+	let Decision = Gate::New(0.5).Apply(Rules(), &Said("wheelie", 0.99, 1.0), &Driving(), &Clear(), false, 45.0);
 	assert_eq!(Decision.Action, Action::SteerLeft);
 	assert!(!Decision.Obeyed);
 	assert!(Decision.Reason.contains("no key for it"), "{}", Decision.Reason);
@@ -235,10 +242,10 @@ fn gate_refuses_an_option_the_driver_cannot_perform() {
 #[test]
 fn gate_never_overrides_a_reversal() {
 	let Reversing = Decision::Rule(Action::ReverseLeft, false, 0.8, "stalled: reverse left".into());
-	let Decision = Gate::New(0.5).Apply(Reversing, &Said("steer_left", 0.99, 1.0), &Driving(), &Jammed(), 45.0);
+	let Decision = Gate::New(0.5).Apply(Reversing, &Said("steer_left", 0.99, 1.0), &Driving(), &Jammed(), true, 45.0);
 	assert_eq!(Decision.Action, Action::ReverseLeft);
 	assert!(!Decision.Obeyed);
-	assert!(Decision.Reason.contains("gated (reversing)"), "{}", Decision.Reason);
+	assert!(Decision.Reason.contains("gated (manoeuvring)"), "{}", Decision.Reason);
 }
 
 #[test]
@@ -247,21 +254,21 @@ fn the_model_may_pick_the_side_when_the_car_is_jammed() {
 	// behind it: the model is told the car has not advanced, and the side it
 	// names is the side the manoeuvre holds.
 	let Reversing = Decision::Rule(Action::ReverseLeft, false, 0.8, "stalled: blocked".into());
-	let Decision = Gate::New(0.5).Apply(Reversing, &Said("reverse_right", 0.9, 1.0), &Driving(), &Jammed(), 45.0);
+	let Decision = Gate::New(0.5).Apply(Reversing, &Said("reverse_right", 0.9, 1.0), &Driving(), &Jammed(), true, 45.0);
 	assert_eq!(Decision.Action, Action::ReverseRight, "{}", Decision.Reason);
 	assert!(Decision.Obeyed);
 	assert!(Decision.Keys().Down && Decision.Keys().Right);
 
 	// From a standstill with the rules still cruising, the same answer is the
 	// whole manoeuvre rather than a correction to one.
-	let Decision = Gate::New(0.5).Apply(Rules(), &Said("reverse_right", 0.9, 1.0), &Driving(), &Jammed(), 45.0);
+	let Decision = Gate::New(0.5).Apply(Rules(), &Said("reverse_right", 0.9, 1.0), &Driving(), &Jammed(), false, 45.0);
 	assert_eq!(Decision.Action, Action::ReverseRight, "{}", Decision.Reason);
 	assert!(Decision.Obeyed);
 }
 
 #[test]
 fn reversing_on_an_open_road_is_refused() {
-	let Decision = Gate::New(0.5).Apply(Rules(), &Said("reverse_left", 0.99, 1.0), &Driving(), &Clear(), 45.0);
+	let Decision = Gate::New(0.5).Apply(Rules(), &Said("reverse_left", 0.99, 1.0), &Driving(), &Clear(), false, 45.0);
 	assert_eq!(Decision.Action, Action::SteerLeft);
 	assert!(!Decision.Obeyed);
 	assert!(Decision.Reason.contains("not stuck"), "{}", Decision.Reason);
@@ -271,11 +278,30 @@ fn reversing_on_an_open_road_is_refused() {
 fn a_held_manoeuvre_keeps_the_side_that_started_it() {
 	// The model picked the right; the attempt count would have said left. The
 	// side is a decision, so the held ticks follow the decision.
-	let mut Carry = Carry { Back:2, Held:Some(Action::ReverseRight), Reversals:1 };
+	let mut Carry = Carry { Back:2, Held:Some(Action::ReverseRight), Turning:0, Side:None, Reversals:1 };
 	let Scene = Jammed();
 	let Tick = DecideAction(&Driving(), &Scene, None, 45.0, &mut Carry);
 	assert_eq!(Tick.Action, Action::ReverseRight, "{}", Tick.Reason);
 	assert_eq!(Carry.Back, 1);
+}
+
+#[test]
+fn a_manoeuvre_ends_in_a_turn_on_the_side_it_reversed() {
+	// The escape is a reverse *and* a turn. A car that only reversed would be a
+	// metre further from the wall and still pointing at it, which is the loop
+	// this rule exists to break.
+	let mut Carry = Carry { Back:1, Held:Some(Action::ReverseRight), Turning:0, Side:None, Reversals:1 };
+	let Scene = Jammed();
+	let Last = DecideAction(&Driving(), &Scene, None, 45.0, &mut Carry);
+	assert!(Last.Action.Reversing(), "{}", Last.Reason);
+	assert_eq!(Carry.Back, 0);
+	assert_eq!(Carry.Turning, TurnOutTicks, "the manoeuvre hands over to the turn");
+
+	// And the turn is taken at pace, on the side the reverse came out on.
+	let Turn = DecideAction(&Driving(), &Scene, None, 45.0, &mut Carry);
+	assert_eq!(Turn.Action, Action::SteerRight, "{}", Turn.Reason);
+	assert!(Turn.Throttle, "the turn is driven, not coasted: {}", Turn.Reason);
+	assert_eq!(Carry.Turning, TurnOutTicks - 1);
 }
 
 #[test]
@@ -294,7 +320,7 @@ fn every_word_the_model_may_say_is_performable() {
 		("hold", Action::Cruise, false),
 	];
 	for (Word, Action, Throttle) in Expected {
-		let Decision = Gate::New(0.5).Apply(Rules(), &Said(Word, 0.9, 1.0), &Driving(), &Clear(), 45.0);
+		let Decision = Gate::New(0.5).Apply(Rules(), &Said(Word, 0.9, 1.0), &Driving(), &Clear(), false, 45.0);
 		assert!(Decision.Obeyed, "{Word} was not obeyed: {}", Decision.Reason);
 		assert_eq!(Decision.Action, Action, "{Word}");
 		assert_eq!(Decision.Throttle, Throttle, "{Word}");

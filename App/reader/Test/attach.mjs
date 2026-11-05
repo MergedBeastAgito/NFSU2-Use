@@ -34,6 +34,23 @@ const Wasm = path.join(
 	"target/wasm32-unknown-unknown/release/NfsuReader.wasm",
 );
 
+// The report is written inside the repository and read by a person diffing one
+// run against the next, so a path in it is named from the repository root. An
+// absolute path would publish the layout of whichever machine ran the harness. A
+// checkout with no `.git` above it falls back to the working directory, which is
+// still relative.
+const Named = (Path) => {
+	let Directory = path.resolve(Path);
+	for (;;) {
+		if (fs.existsSync(path.join(Directory, ".git"))) {
+			return path.relative(Directory, Path).split(path.sep).join("/");
+		}
+		const Parent = path.dirname(Directory);
+		if (Parent === Directory) return path.relative(process.cwd(), Path);
+		Directory = Parent;
+	}
+};
+
 const Arg = (Name, Fallback) => {
 	const i = process.argv.indexOf(`--${Name}`);
 	return i > 0 && process.argv[i + 1] ? process.argv[i + 1] : Fallback;
@@ -292,7 +309,7 @@ const Soak_ = await Eval(`(() => {
 const Shape_ = Shape();
 const Report = {
 	at: new Date().toISOString(),
-	wasm: { path: Wasm, ...Shape_ },
+	wasm: { path: Named(Wasm), ...Shape_ },
 	attach: { ...Attach, page_first: undefined },
 	ticks: { required: Ticks, ...Tick },
 	panic: Panic,

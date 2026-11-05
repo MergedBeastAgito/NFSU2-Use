@@ -66,6 +66,7 @@ impl Gate {
 		Advice:&Advice,
 		Car:&Car,
 		Scene:&Situation,
+		Manoeuvre:bool,
 		TargetKmh:f64,
 	) -> Decision {
 		let Said = format!(
@@ -81,9 +82,10 @@ impl Gate {
 		// A manoeuvre already under way is finished. The model may say which
 		// way to come out - that is a choice about the road behind, and it is
 		// the one thing it has been given evidence for - but a `throttle` here
-		// would drive back into the wall the car is leaving.
-		if Reversing && !Escape {
-			let Reason = format!("{} · {Said} gated (reversing)", Rule.Reason);
+		// would drive back into the wall the car is leaving, and a `steer` here
+		// would abandon the turn that is carrying it away.
+		if Manoeuvre && !Escape {
+			let Reason = format!("{} · {Said} gated (manoeuvring)", Rule.Reason);
 			return Rule.Noted(Advice.Probability, Advice.Confidence).Explain(Reason);
 		}
 

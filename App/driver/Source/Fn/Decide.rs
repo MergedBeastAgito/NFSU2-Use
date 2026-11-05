@@ -20,6 +20,14 @@ const Deadzone:f64 = 0.03;
 /// How many ticks to spend backing out.
 pub const BackTicks:u32 = 5;
 
+/// How many ticks to spend turning away after a manoeuvre.
+///
+/// A reverse that is followed by straight-line throttle drives back into the
+/// thing it just left: the car is a metre further from the wall and pointing at
+/// it. The turn is what makes the escape an escape, and it is why a car that
+/// alternates sides without it saws at the same corner for a hundred ticks.
+pub const TurnOutTicks:u32 = 10;
+
 /// What the rules carry from one tick to the next.
 ///
 /// A value rather than two counters in the signature: they are written
@@ -39,6 +47,10 @@ pub struct Carry {
 	/// and a held manoeuvre that recomputed the side from the attempt count
 	/// would reverse the other way from the one that was chosen.
 	pub Held:Option<Action>,
+	/// How many ticks are left turning away from what the car just left.
+	pub Turning:u32,
+	/// The side it turns on, kept from the manoeuvre that set `Turning`.
+	pub Side:Option<Action>,
 	/// How many times the stall rule has fired.
 	pub Reversals:u32,
 }
@@ -57,11 +69,37 @@ pub struct Carry {
 pub fn Decide(Car:&Car, Scene:&Situation, Cue:Option<f64>, TargetKmh:f64, Carry:&mut Carry) -> Decision {
 	if Carry.Back > 0 {
 		Carry.Back -= 1;
+		let Held = Carry.Held.unwrap_or(Backing(Carry.Reversals));
+		// The last tick of the manoeuvre hands over to the turn: the car has
+		// made room behind it, and what it does next decides whether the room
+		// is used. The side is the one it reversed on, so the wheels are
+		// already pointing where the car is about to go.
+		if Carry.Back == 0 {
+			Carry.Turning = TurnOutTicks;
+			Carry.Side = Some(match Held {
+				Action::ReverseRight => Action::SteerRight,
+				_ => Action::SteerLeft,
+			});
+		}
 		return Decision::Rule(
-			Carry.Held.unwrap_or(Backing(Carry.Reversals)),
+			Held,
 			false,
 			0.8,
 			format!("backing out · {:.0} km/h · {}", Car.Kmh, Scene.Word),
+		);
+	}
+
+	// Turning away, at the target pace: the escape is a reverse *and* a turn,
+	// and a driver that only reversed would arrive back at the same wall with
+	// the same heading.
+	if Carry.Turning > 0 {
+		Carry.Turning -= 1;
+		let Side = Carry.Side.unwrap_or(Action::SteerLeft);
+		return Decision::Rule(
+			Side,
+			Car.Kmh < TargetKmh,
+			1.0,
+			format!("turning out · {} · {:.0} km/h", Side.Name(), Car.Kmh),
 		);
 	}
 
