@@ -3,7 +3,7 @@
 //! No browser and no socket: the corpus is the real one beside this crate
 //! (`Templates/Observation.json`, `Templates/Questions.json`), the poster answers
 //! from a string, and the port answers from an [`Answer`] a test wrote. What that
-//! proves is the three claims the rewire makes:
+//! proves is the four claims the rewire makes:
 //!
 //! - **the priority still selects the lanes it always did** - one representative
 //!   reading per lane, built by the crate's own [`Observe`], so the case is a
@@ -11,7 +11,13 @@
 //! - **the request is the lane's** - exactly `{model, state, questions}`, the
 //!   lane's fields and no others, posted to the decision route;
 //! - **a failed consultation is not a failed tick** - the lane it chose survives
-//!   in the trace, the rules keep the car, and the word saying why travels.
+//!   in the trace, the rules keep the car, and the word saying why travels;
+//! - **the adapter that runs in a game is the one under test** - the five lanes
+//!   are driven through [`Http`], this crate's `Poster`, over a transport that
+//!   records what it was handed instead of opening a socket. The composition
+//!   assertions are then about the code a run executes, not about a stand-in a
+//!   test wrote to imitate it, and the URL it builds is asserted rather than
+//!   assumed.
 //!
 //! # Why the five lanes are asserted here rather than in the Lane crate
 //!
@@ -34,11 +40,11 @@ use std::{
 };
 
 use AgenticLane::{
-	Answer, Answered, Budget, Create, Decider, Error, Failure, Load, Options, Poster, Request, Select, Selection,
+	Answer, Answered, Budget, Compose, Create, Decider, Error, Failure, Load, Options, Poster, Request, Select, Selection,
 	State as Reading, Usage,
 };
 use AgenticLane::DecidePort;
-use AgenticNfsuDriver::{Car, Consult, Consulted, CorpusRoot, Observe, Priority, Situation, TemplateRules};
+use AgenticNfsuDriver::{Car, Consult, Consulted, CorpusRoot, Endpoint, Http, Observe, Priority, Situation, TemplateRules};
 use AgenticSdk::{Call, FutureBox, Never, Wall};
 use serde_json::{Value, json};
 
@@ -459,3 +465,190 @@ async fn a_failed_consultation_keeps_the_lane_and_says_why() {
 	assert_eq!(Consulted.View["error"], json!("post-failed: no token"));
 	assert_eq!(Consulted::None().View, Value::Null, "a tick that asked nothing paints nothing");
 }
+
+/// A transport that records what the adapter handed it and answers from a
+/// string.
+///
+/// It stands where curl stands, and it is handed exactly what curl would be
+/// handed: the URL [`Endpoint`] built, the body the crate composed, and the
+/// token the adapter was constructed with. Recording the triple is what lets
+/// the assertions below be about the adapter a run executes rather than about a
+/// poster a test wrote to imitate it.
+struct Recorder {
+	/// Every `(url, body, token)` the adapter would have sent, in order.
+	Sent:Mutex<Vec<(String, String, String)>>,
+	/// The body every call answers with.
+	Reply:String,
+}
+
+impl Recorder {
+	/// A transport answering `Reply`.
+	fn New(Reply:&str) -> Arc<Self> { Arc::new(Self { Sent:Mutex::new(Vec::new()), Reply:Reply.to_string() }) }
+
+	/// Every call the adapter made, in order.
+	fn Sent(&self) -> Vec<(String, String, String)> {
+		self.Sent.lock().unwrap_or_else(|Poison| Poison.into_inner()).clone()
+	}
+
+	/// The last call the adapter made, for a test driving one case at a time.
+	fn Last(&self) -> (String, String, String) {
+		self.Sent().pop().expect("the adapter posted nothing, so there is no request to assert")
+	}
+}
+
+/// A decider over the real corpus, wired to this crate's adapter over a
+/// recording transport instead of curl.
+///
+/// The credentials are arguments because their absence is a case worth testing:
+/// an adapter built without them must refuse *before* it reaches what would have
+/// been a socket, which is the structural half of the no-network claim.
+fn Over(Account:Option<&str>, Token:Option<&str>, Reply:&str) -> (Decider, Arc<Recorder>) {
+	let Recorder = Recorder::New(Reply);
+	let Kept = Recorder.clone();
+	let Http = Http::Over(
+		Account.map(str::to_string),
+		Token.map(str::to_string),
+		Arc::new(move |Url:&str, Body:&str, Token:&str| {
+			Kept.Sent
+				.lock()
+				.unwrap_or_else(|Poison| Poison.into_inner())
+				.push((Url.to_string(), Body.to_string(), Token.to_string()));
+			Ok(Kept.Reply.clone())
+		}),
+	);
+	let Decider = Create(
+		Corpus(),
+		Arc::new(Http),
+		Options {
+			Model:"clef-flash".to_string(),
+			Lanes:Priority(),
+			Templates:TemplateRules(),
+			Budget:Budget::New(0, 0),
+		},
+	);
+	(Decider, Recorder)
+}
+
+#[tokio::test]
+async fn the_adapter_posts_each_of_the_five_lanes_to_the_decision_route() {
+	// The whole chain a tick takes - the crate's selection, its composition,
+	// this crate's adapter, and the decode of the reply - with the socket
+	// replaced by a recorder. A migration that had quietly changed which lane a
+	// reading selects, which route it asks, or what the body carries fails here
+	// by the name of the case.
+	let (Decider, Recorder) = Over(Some("account-id"), Some("a-token"), REPLY);
+	let mut Seen:BTreeSet<String> = BTreeSet::new();
+	for Case in Cases() {
+		let Reading = Reading(&Case);
+		let Selection = Decider.Select(&Reading).unwrap_or_else(|Why| panic!("case '{}': {Why}", Case.Name));
+		assert_eq!(Selection.Lane.Name, Case.Lane, "case '{}' selected lane '{}'", Case.Name, Selection.Lane.Name);
+		assert_eq!(
+			Selection.Template.Name, Case.Template,
+			"case '{}' selected template '{}'",
+			Case.Name, Selection.Template.Name
+		);
+
+		let Answer = Decider
+			.Decide(&Selection, &Reading, Bound())
+			.await
+			.unwrap_or_else(|Why| panic!("case '{}': {Why}", Case.Name));
+		// The reply the transport returned reached the decoder unchanged: one
+		// choice, with its own share, and one score.
+		assert_eq!(
+			Answer.Choice("action"),
+			Some(("steer_left", 0.72)),
+			"case '{}': the adapter returned the body the decoder was given",
+			Case.Name
+		);
+
+		let (Url, Body, Token) = Recorder.Last();
+		// What the crate asked for, composed by the crate itself: the adapter's
+		// job is to put *these* bytes at *this* address, and asserting against
+		// the composition rather than a literal is what makes that a claim about
+		// forwarding instead of a claim about spelling.
+		let Composed = Compose(&Selection, &Reading).expect("the selection composes");
+		println!(
+			"case {:<18} -> {:<8} {:<20} {Url} · {} bytes",
+			Case.Name,
+			Selection.Lane.Name,
+			Selection.Template.Name,
+			Body.len()
+		);
+		assert_eq!(Url, Endpoint("account-id", &Composed.Path()), "case '{}': the URL the adapter built", Case.Name);
+		assert_eq!(Body, Composed.Text(), "case '{}': the adapter forwards the crate's own bytes", Case.Name);
+		assert_eq!(Token, "a-token", "case '{}': the credential the adapter was built with", Case.Name);
+
+		// The route itself, pinned once per case rather than derived, so a
+		// change to the crate's route and a change to this crate's use of it
+		// cannot agree with each other and pass.
+		assert!(
+			Url.ends_with("/ai/run/@cf/cloudflare/clef-flash"),
+			"case '{}': a decision model is asked on the decision route, never a chat-completions one · {Url}",
+			Case.Name
+		);
+
+		// The body's shape, as the endpoint reads it: three keys, the bare model
+		// name, and the lane's fields and no others. The enumeration of chat
+		// fields that must not appear is `the_posted_body_is_the_lane_and_the_question_and_nothing_else`'s
+		// claim; here the key set is asserted whole, which excludes them by
+		// construction.
+		let Json:Value = serde_json::from_str(&Body).expect("the posted body is JSON");
+		let Keys:Vec<&str> = Json.as_object().expect("the body is an object").keys().map(String::as_str).collect();
+		assert_eq!(Keys, ["model", "questions", "state"], "case '{}': a decision request is three keys · {Json}", Case.Name);
+		assert_eq!(Json["model"], json!("clef-flash"), "case '{}': the body names the bare model", Case.Name);
+		let mut Wanted:Vec<String> = Selection.Lane.Fields.clone();
+		Wanted.sort();
+		let Sent:Vec<&str> = Json["state"].as_object().expect("the state is an object").keys().map(String::as_str).collect();
+		assert_eq!(Sent, Wanted, "case '{}': the state is the lane's fields and nothing else · {Json}", Case.Name);
+
+		Seen.insert(Selection.Lane.Name.clone());
+	}
+	let Wanted:BTreeSet<String> = LANES.iter().map(|(Name, _)| Name.to_string()).collect();
+	assert_eq!(Seen, Wanted, "the cases went through the adapter as {Seen:?}, and all five lanes must be exercised");
+}
+
+#[tokio::test]
+async fn a_run_without_credentials_never_reaches_the_transport() {
+	// The structural half of "the tests make no request": the adapter refuses
+	// before it calls what would have been curl. That is why a suite with no
+	// credentials is not a suite that quietly asked the network and ignored the
+	// answer - the transport is never entered at all.
+	let (Decider, Recorder) = Over(None, None, REPLY);
+	let Case = Cases().into_iter().find(|Case| Case.Lane == "drive").expect("the drive case");
+	let Reading = Reading(&Case);
+	let Selection = Decider.Select(&Reading).expect("the drive case selects a lane");
+	let Why = Decider
+		.Decide(&Selection, &Reading, Bound())
+		.await
+		.expect_err("a run with no account id is refused, not answered");
+	assert_eq!(Why.Why(), "post-failed: no account id", "the word a trace prints is the one it printed before the move");
+	assert!(Recorder.Sent().is_empty(), "the transport was reached without a credential: {:?}", Recorder.Sent());
+}
+
+#[tokio::test]
+async fn the_adapter_reports_a_transport_failure_as_the_lane_it_was_asking() {
+	// The other half of a bounded call: a transport that answers a word instead
+	// of a body is a `post-failed` carrying the path that was asked, and it is
+	// the lane's own path - so a trace can say which question went unanswered.
+	let Refusing:Http = Http::Over(
+		Some("account-id".to_string()),
+		Some("a-token".to_string()),
+		Arc::new(|_Url:&str, _Body:&str, _Token:&str| Err("http 401".to_string())),
+	);
+	let Decider = Create(
+		Corpus(),
+		Arc::new(Refusing),
+		Options { Model:"clef-flash".to_string(), Lanes:Priority(), Templates:TemplateRules(), Budget:Budget::New(0, 0) },
+	);
+	let Case = Cases().into_iter().find(|Case| Case.Lane == "corner").expect("the corner case");
+	let Reading = Reading(&Case);
+	let Selection = Decider.Select(&Reading).expect("the corner case selects a lane");
+	let Why = Decider.Decide(&Selection, &Reading, Bound()).await.expect_err("a 401 is not an answer");
+	assert_eq!(Why.Why(), "post-failed: http 401", "the transport's word is the sentence");
+	assert_eq!(
+		Why.Detail(),
+		Compose(&Selection, &Reading).expect("the selection composes").Path(),
+		"the detail is the path that was asked, so a trace names the question"
+	);
+}
+

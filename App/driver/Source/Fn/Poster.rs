@@ -36,9 +36,20 @@
 //! caller's deadline and cancellation are raced against it. When there is no
 //! executor at all - a caller driving the future with `BlockOn` - the call runs
 //! on the only thread there is, because there is nothing to yield to.
+//!
+//! # The transport is a value, so the adapter is testable
+//!
+//! [`Http::New`] is the production value: the environment's credentials and
+//! `Fn::Cloudflare::Post` as the thing that sends. [`Http::Over`] is the same
+//! adapter over credentials and a transport the caller supplies, which is what
+//! lets a test drive *this* code - the path, the body, the deadline race, the
+//! recorded round trip - and answer from a string instead of a socket. Without
+//! that seam the only testable half of the adapter would be
+//! `Fn::Cloudflare::Endpoint`, and the half that composes a URL and forwards a
+//! body would be reachable only by asking the network.
 
 use std::{
-	sync::{Mutex, MutexGuard, OnceLock},
+	sync::{Arc, Mutex, MutexGuard, OnceLock},
 	time::Instant,
 };
 
@@ -46,6 +57,16 @@ use AgenticLane::{Failure, Poster, Request};
 use AgenticSdk::{Call, FutureBox};
 
 use crate::Fn::Cloudflare::{Account, Endpoint, Post, Token};
+
+/// What puts one request on the wire: the URL, the body, the token, and the
+/// reply body or a word saying why there is none.
+///
+/// A function rather than a trait because it has one method and no state of its
+/// own: the credentials are read once by [`Http`], and everything else a
+/// transport needs it is handed. The words it fails with are the transport's
+/// own (`"timeout"`, `"curl unavailable"`, `"http 401"`), which the port maps
+/// onto `post-failed` with the path as the detail.
+pub type Transport = Arc<dyn Fn(&str, &str, &str) -> Result<String, String> + Send + Sync>;
 
 /// One round trip, as it went over the wire.
 ///
@@ -103,11 +124,30 @@ pub struct Http {
 	Account:Option<String>,
 	/// The API token, when the environment or the named dotenv file carries one.
 	Token:Option<String>,
+	/// What actually sends the request. Production supplies
+	/// [`crate::Fn::Cloudflare::Post`]; a test supplies a recorder.
+	Transport:Transport,
 }
 
 impl Http {
 	/// The transport the environment describes.
-	pub fn New() -> Self { Self { Account:Account(), Token:Token() } }
+	pub fn New() -> Self {
+		let Sending:Transport = Arc::new(Post);
+		Self::Over(Account(), Token(), Sending)
+	}
+
+	/// The same adapter over credentials and a transport the caller supplies.
+	///
+	/// The two facts a call needs are *who* is asked and *with what*; a socket
+	/// is a third fact and not one this adapter is about. So a caller may hand
+	/// its own [`Transport`] and get the whole of the adapter - the URL built
+	/// from [`Endpoint`], the body forwarded byte for byte, the deadline and
+	/// cancellation raced around the wait, the round trip recorded - with the
+	/// answer coming from wherever it likes. [`Http::New`] is this constructor
+	/// with curl.
+	pub fn Over(Account:Option<String>, Token:Option<String>, Transport:Transport) -> Self {
+		Self { Account, Token, Transport }
+	}
 
 	/// Whether this transport has both of the credentials a request needs.
 	///
@@ -150,9 +190,14 @@ impl Poster for Http {
 			// closure needs the bytes to send.
 			let Sent = Body.clone();
 			let Token = Token.to_string();
-			// `Post` blocks on a child process. It owns its arguments, so the
-			// future holds no borrow of the request across the await.
-			let Work = move || Post(&URL, &Body, &Token);
+			// The transport is cloned out of the value rather than borrowed:
+			// the closure is handed to `spawn_blocking`, which requires it to
+			// own everything it touches and to outlive this future's borrow of
+			// `self`. `Post` blocks on a child process, so it owns its
+			// arguments and the future holds no borrow of the request across
+			// the await.
+			let Sending = self.Transport.clone();
+			let Work = move || Sending(&URL, &Body, &Token);
 
 			let Started = Instant::now();
 			let Answer = match tokio::runtime::Handle::try_current() {
