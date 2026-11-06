@@ -71,9 +71,7 @@ Two things follow, and both are load-bearing:
   margin. That is why the model advises and the rules decide: the driver obeys a
   probability above a threshold and records everything else.
 
-The honest next step is not a better prompt but a better observation: an image
-of the frame beside the text state, since Clef is multimodal and the cue is
-visual. Until that is measured, this template is a template, not a controller.
+The measurement above is over text state alone: the frame is not sent.
 
 ---
 
@@ -84,11 +82,10 @@ sixteen. `Questions.json` declares five - `drive`, `recover`, `corner`, `race`,
 `context` - each naming its fields, its templates, how often it is worth
 sending, and the `select` condition that chooses it.
 
-The condition is what used to be a rule in Rust. Each lane excludes the lanes
-that outrank it - `recover` first, because a jammed car is not racing, then
-`race`, `corner` and `context` - so exactly one condition holds for a reading
-and `drive` is the single catch-all. Adding a lane, or moving one up the order,
-is an edit to this file and nothing else.
+Each lane's condition lives in this file rather than in the driver's Rust. Each lane excludes the
+lanes that outrank it - `recover` first, because a jammed car is not racing, then `race`, `corner`
+and `context` - so exactly one condition holds for a reading and `drive` is the single catch-all.
+Adding a lane, or moving one up the order, is an edit to this file and nothing else.
 
 Measured with the same question (`freeroam.track_cue`) against `clef-flash`:
 

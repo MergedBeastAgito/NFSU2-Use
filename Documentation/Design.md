@@ -1,10 +1,9 @@
-# What the research settled
+# Design
 
-What this repository concluded about observing a closed system, deciding about it, and
-inserting a bounded influence back into it. The game is where every boundary can be measured;
-the design must hold where none can. A record says what was observed and how, never where it
-lives; a capability is negotiated, never inferred from the route the code took; and no claim
-outruns the evidence at the boundary that would confirm it.
+How this application observes a closed system, decides about it, and inserts a bounded influence
+back into it. A record says what was observed and how, never where it lives; a capability is
+negotiated, never inferred from the route the code took; and no claim outruns the evidence at the
+boundary that would confirm it.
 
 ---
 
@@ -84,7 +83,7 @@ key events for a trim API is forbidden: the semantics differ.
 The dependency direction is driver to SDK to contract, with the SDK re-exporting the trait
 rather than defining a second one. A contract that depends on the facade, a concrete driver
 or the composition root is a cycle waiting for its second consumer. The trait definition is
-a contract, not a capability, and nothing waits for it to be ready.
+a contract, not a capability.
 
 Two seams, not one. The framework-facing substrate contract says only "evaluate this
 expression in this document"; memory layout is not a substrate concern. The domain-facing
@@ -230,22 +229,23 @@ ordered subscription; and sensitive tables stay private behind scoped views.
 
 ## The web-game pack
 
-One versioned pack, three logical components, three artifact hashes: a reader that acquires
-observations, a protocol component that validates, sequences and expires, and an actuator
-that applies bounded influence. The split that matters is privilege: the reader gets read
-access, the protocol owns its scratch state, the actuator gets only approved operations, and
-browser privileges stay in the host.
+Two artefacts carry three roles: a reader that acquires observations, a protocol that validates,
+sequences and expires, and an actuator that applies bounded influence. The reader is a 516-byte wasm
+module instantiated beside the game's instance; the protocol and the actuator are the driver's. The
+split that matters is privilege: the reader gets read access, the protocol owns its own state, the
+actuator gets only approved operations, and browser privileges stay in the host.
 
 Bounds are not layout: an address can stay inside the memory after an update and hold a
-different field, so the reader is pinned to a host build and memory-map identity, and a
-mismatch fails before the first read. Importing memory also grants write access, so the
+different field, so the reader names the port's own offsets and checks the pointer chain and the
+car block's length before it reads. Importing memory also grants write access, so the
 smallest auditable reader has scalar exports, no allocation and no linear-memory writes.
 
-The pack's own state lives outside game memory: a scratch region with an ABI version,
-transmit and receive pointers and capacities, a poll entry point, a monotonic clock and a
-notify import. Length-prefixed JSON is enough for a first version; a single-producer,
-single-consumer ring for concurrency. The store authorises, orders and accounts for expiring
-targets; the page reads, revalidates and writes without waiting for it.
+The reader stores nothing, because the imported memory is the game's heap: no allocator, no data
+segment, no store. One call returns one 64-bit value - a `#[repr(C)]` struct and a `u128` both
+compile to `(i32) -> nil`, and `v128` is refused at the JavaScript call site - so seven numbers take
+several calls, and the two that move every frame travel together. A panic is `unreachable()`, which
+the page catches as a trap. The driver authorises, orders and accounts for expiring targets; the
+page reads, revalidates and writes without waiting for it.
 
 ---
 

@@ -59,7 +59,7 @@ Templates/                  data, read at runtime - never compiled in
 
 Documentation/
   StateCharts.md            the tick, the send/receive contract, the pipe into the game
-  Vision.md                 why the schema is the product and NFSU2 is the unit test
+  Vision.md                 the schema the pipeline is built around
   Design.md                 what the research settled: the envelope, the tiers, the
                             protocol, and where the design is still uncertain
   Memory.md                 the memory map, every address named by the port's source

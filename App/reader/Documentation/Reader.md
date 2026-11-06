@@ -2,8 +2,8 @@
 
 A `cdylib` compiled to `wasm32-unknown-unknown` that the page instantiates
 beside the game's own instance. It imports the game's memory and returns the car
-state as numbers, so a tick stops being an `Evaluate` round trip through a
-string of JavaScript.
+state as numbers, so a tick is a handful of calls rather than an `Evaluate`
+round trip through a string of JavaScript.
 
 ---
 
@@ -72,9 +72,9 @@ a search through two gigabytes.
 - **`Car` block size `0x9e0`** - `local_state` refuses to read a car it cannot
   see that much of (`ok(car, 0x9e0)`), and so does this module.
 
-A reading is **NaN** when there is no car. A car parked at the origin and a
-world that has not given one are different answers, and only one of them is a
-number.
+Every float reading is **NaN** when there is no car; `read_gear` answers `0` and
+`read_car` answers `0`. A car parked at the origin and a world that has not
+given one are different answers, and only one of them is a number.
 
 ---
 
@@ -117,38 +117,39 @@ where both readings agree.
 `#[panic_handler]` calls `unreachable()`, and the crate is built with
 `panic = "abort"`. A panic is therefore a wasm trap: the page catches a
 `RunTimeError`, the module's other exports still work, and the game's own
-instance - a different module - never sees it. `panic_probe()` exists so that
-the containment can be watched on a live game rather than taken on faith.
+instance - a different module - never sees it. `panic_probe()` is exported so
+that containment can be watched on a live game.
 
 ---
 
 ## Build
 
 ```sh
-cargo build --release          # .cargo/config.toml carries the link flags
+cargo build --release # .cargo/config.toml carries the link flags
 ```
 
 The build writes `target/wasm32-unknown-unknown/release/NfsuReader.wasm` (516
-bytes), which is the path the driver resolves by default: relative to
-`App/reader`, with `NFSU2_READER` naming another module and
+bytes), which is the path the driver resolves by default:
+`../reader/target/wasm32-unknown-unknown/release/NfsuReader.wasm` beside the
+driver crate, with `NFSU2_READER` naming another module and
 `/usr/local/share/nfsu2/NfsuReader.wasm` as the last resort.
 
 ---
 
 ## What it does not do
 
-It does not inject input. Input stays on `session.input.key`, the path that is
-proven to move the car; the ring a second writer would have to join is described
-in [Input-Ring.md](Input-Ring.md), together with the reason it is not safe to
-join yet.
+It does not inject input. Input stays on `session.input.key`, one call per frame
+per key; the ring a second writer would have to join is described in
+[Input-Ring.md](Input-Ring.md), together with the reason the page is its only
+writer.
 
 ---
 
 ## Reading the artefact
 
 The properties above are visible in the module itself, which is what keeps them
-claims about this build rather than about the source: `wasm-objdump -x` shows one
-import and no globals, `-h` shows no `Data` section, and
+claims about this build rather than about the source: `wasm-objdump -x` shows
+one import and no globals, `-h` shows no `Data` section, and
 `wasm-objdump -d | grep -cE '\.store|memory.grow'` is 0. `Committed()` is the
 runtime half of the same statement - every read is bounded against
 `memory_size(0)` and the pointer chain is bounded at each step.

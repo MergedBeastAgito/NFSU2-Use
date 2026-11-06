@@ -1,7 +1,7 @@
 # The input mailbox
 
-What a second writer would have to join if injection ever moved off
-`session.input.key`, and why it has not.
+The block the game allocates for input: where it sits, the two rings that run
+through it in opposite directions, and why the page is its only writer.
 
 Everything here is the port's own: `runtime/web/input_proto.h` is the struct the
 game compiles, `web/src/input/proto.ts` is the page's copy of the same numbers
@@ -66,9 +66,6 @@ assumed: `4416 + 1024×16 = 20800`, `20800 + 256×16 = 24896`,
 
 ## The two rings run in opposite directions
 
-This is the part that is easy to get backwards, and the card had it backwards:
-`main.js` does not write the ring at `d+20800`.
-
 **Page → game, at `d+4416`.** The page pushes a 16-byte `InEv` and publishes it
 with `Atomics.store(IM_EV_W, w+1)` followed by `Atomics.notify`
 (`web/src/input/index.ts`, `push`). The game's input thread copies
@@ -114,7 +111,7 @@ synthetic event.
 
 ---
 
-## Why a second writer is not proven safe
+## Why the page is the only writer
 
 The ring has **one writer by contract**, and the game enforces the contract with
 the `IM_ATTACHED` compare-exchange. Two mechanisms make a second producer unsafe
@@ -134,5 +131,5 @@ one. Joining it would mean either taking the `IM_ATTACHED` claim away from the
 page (and losing `session.input.key` with it), or adding a sequence number the
 consumer does not read - which is a change to the game, not to the caller.
 
-So injection stays on `session.input.key`: one call per frame per key, the
-proven path, with the game's own producer doing the publishing.
+Injection therefore stays on `session.input.key`: one call per frame per key,
+with the game's own producer doing the publishing.
