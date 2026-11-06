@@ -1,15 +1,15 @@
-//! `agentic.nfsu.drive`: drive the NFSU2 browser port from its own memory.
+//! `agito.nfsu.drive`: drive the NFSU2 browser port from its own memory.
 //!
-//! An extension beside Agentic, not a change to it: the browser work is done
-//! through `agentic-sdk`'s `Browse` port - the facade's re-export of
-//! `agentic.browse` - which means every step of this crate - reading the car,
+//! An extension beside Agito, not a change to it: the browser work is done
+//! through `agito-sdk`'s `Browse` port - the facade's re-export of
+//! `agito.browse` - which means every step of this crate - reading the car,
 //! holding a key, painting the overlay - is one `Evaluate`. No input verb was
-//! added to Agentic for it, because the game injects input itself through
+//! added to Agito for it, because the game injects input itself through
 //! `session.input.key`.
 //!
 //! # The port, and the value that answers for it
 //!
-//! [`Driver`] implements `agentic.adapter`, the port `agentic-sdk` re-exports
+//! [`Driver`] implements `agito.adapter`, the port `agito-sdk` re-exports
 //! for a substrate this workspace did not write. It is the whole reason this
 //! crate is an extension rather than a copy: a composition root constructs the
 //! adapter once, holds it as `Arc<dyn Adapter>`, and passes it on without
@@ -30,11 +30,11 @@
 //! The model is an advisor with a probability, and the rules are the driver.
 //! The split lives in one place each: [`Fn::Gate`] decides whether an answer is
 //! obeyed, [`Fn::Decide`] decides what the car does when it is not, and the
-//! round trip that produces the answer is `agentic.lane.decide`'s.
+//! round trip that produces the answer is `agito.lane.decide`'s.
 //!
 //! # What this crate no longer carries
 //!
-//! The lane and template machinery moved to the Lane crate (`agentic-lane`,
+//! The lane and template machinery moved to the Lane crate (`agito-lane`,
 //! `Crate/Lane`), which owns it for every caller rather than for this game.
 //! What went, and where it lives now:
 //!

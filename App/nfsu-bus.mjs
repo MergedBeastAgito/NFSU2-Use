@@ -2,7 +2,7 @@
 //
 // This replaces the `.jsonl` traces as the source of truth. A file is a log you
 // read afterwards; a table is state a consumer can subscribe to and act on now,
-// which is the shape the Agentic toolkit already uses (SpacetimeDB: tables,
+// which is the shape the Agito toolkit already uses (SpacetimeDB: tables,
 // subscriptions, one channel between modules). Any adapter - a JS driver, a Rust
 // crate through Evaluate, the overlay - reads and writes the same tables.
 //

@@ -1,11 +1,11 @@
-# Agentic Adapter
+# Agito Adapter
 
-A proposal for the package this crate needed and Agentic does not have.
+A proposal for the package this crate needed and Agito does not have.
 
-**Landed, in two halves.** `Crate/Adapter` (`agentic-adapter`) exists in the
-Agentic workspace, `agentic-sdk` re-exports its port so a crate outside the tree
+**Landed, in two halves.** `Crate/Adapter` (`agito-adapter`) exists in the
+Agito workspace, `agito-sdk` re-exports its port so a crate outside the tree
 can implement it, and this crate's `Driver` does implement it: `module.json`
-declares `"kind": "adapter"`, `agentic verify --module @agentic/nfsu-driver`
+declares `"Kind": "Adapter"`, `agito verify --module @agito/nfsu-driver`
 reports it ready, and the value is held as `Arc<dyn Adapter>`, so `Serves`
 answers whether it agrees with that file. What follows is the
 proposal, with the two places it was wrong corrected against the implementation:
@@ -14,10 +14,10 @@ specification.
 
 ## The gap
 
-Agentic ships capabilities (`browse`, `chat`, `design`, `skills`) and a
+Agito ships capabilities (`browse`, `chat`, `design`, `skills`) and a
 composition root that names the one concrete browser adapter. A third party with
 a _new substrate_ - another game, another protocol, another device - can copy
-this crate, but there is nowhere to register it: `agentic manifests` lists what
+this crate, but there is nowhere to register it: `agito manifests` lists what
 the workspace compiles in, and nothing outside that workspace could say "I
 provide this port" and be believed.
 
@@ -48,7 +48,7 @@ Two corrections to the first draft:
   release a caller skips. It is there, and it never fails.
 
 `Error` is the adapter's own: a code - the word this crate's own `module.json`
-declares - plus a message and what was observed. Agentic does not enumerate the
+declares - plus a message and what was observed. Agito does not enumerate the
 failures of a substrate it has never seen, which is why `Crate/Adapter`'s own
 manifest names no errors and this one names three.
 
@@ -56,46 +56,46 @@ manifest names no errors and this one names three.
 
 ```json
 {
-	"name": "@someone/thing",
-	"kind": "adapter",
-	"provides": { "port": "agentic.thing.drive", "errors": ["timeout"] },
-	"requires": { "ports": ["agentic.browse"] },
-	"artefact": { "entry": "Target/release/thing", "runtime": "rust>=1.88" },
-	"state": "holds-transport"
+	"Name": "@someone/thing",
+	"Kind": "Adapter",
+	"Provide": { "Port": "agito.thing.drive", "Error": ["timeout"] },
+	"Require": { "Port": ["agito.browse"] },
+	"Artefact": { "Entry": "Target/release/thing", "RunTime": "rust>=1.88" },
+	"State": "HoldTransport"
 }
 ```
 
-`kind: "adapter"` is the only new vocabulary. Everything else - `provides`,
-`requires`, `artefact`, `state` - is the manifest Agentic already reads.
+`Kind: "Adapter"` is the only new vocabulary. Everything else - `Provide`,
+`Require`, `Artefact`, `State` - is the manifest Agito already reads.
 
 ## Why a trait and not a registry
 
 A registry is a global that makes load order observable; a trait is a value the
-composition root already knows how to pass. Agentic's own rule - a capability
+composition root already knows how to pass. Agito's own rule - a capability
 never names a concrete adapter - is what this preserves: the adapter is
 constructed once, in the composition root, and handed on as `Arc<dyn Adapter>`.
 The port the value reports is compared with the port the manifest declares by
-`AgenticAdapter::Serves`, at the one place both are in hand.
+`Adapter::Serves`, at the one place both are in hand.
 
 ## How a third-party manifest is found
 
-Nothing is compiled into Agentic. `agentic manifests --adapter <dir>` and
-`agentic verify --module <name>` read a `module.json` from a directory named by
-`--adapter`, or by `AGENTIC_ADAPTER_PATH` (a path list) when the flag is absent.
+Nothing is compiled into Agito. `agito manifests --adapter <dir>` and
+`agito verify --module <name>` read a `module.json` from a directory named by
+`--adapter`, or by `AGITO_ADAPTER_PATH` (a path list) when the flag is absent.
 The listing prints the directory each row was read from, so a row this binary
 carries and a row it read are never confused.
 
-`Documentation/Adapter.md` in the Agentic repository is the full statement: what
+`Documentation/Adapter.md` in the Agito repository is the full statement: what
 the reader accepts, what a foreign readiness report checks, and what it cannot.
 
 ## What this crate does with it
 
 `Source/Struct/Driver.rs` is the value a composition root holds:
 
-- `Port()` answers `agentic.nfsu.drive` - the string `module.json` declares,
+- `Port()` answers `agito.nfsu.drive` - the string `module.json` declares,
   from one constant rather than three literals;
 - `Call(Request, Call)` performs one tick: bootstrap the page on the first call,
-  read the car, decide by the rules, ask `agentic.lane.decide` when the policy
+  read the car, decide by the rules, ask `agito.lane.decide` when the policy
   says to - the lane selected from the corpus, the body composed there, the
   poster this crate supplies - hold the four keys, publish, and answer the state
   it read as `{ "tick", "car", "scene", "lane", "asked", "modelAdvice",
@@ -123,13 +123,13 @@ The model is a port the adapter holds, not code it carries: `Driver::New` takes
 an `Option<Arc<dyn DecidePort>>`, and `Source/Main.rs` builds it from the corpus
 (`Source/Fn/Corpus.rs`: the directory and the run's ceiling - the lanes, their
 conditions and their templates are the corpus's), the transport
-(`Source/Fn/Poster.rs`: the `Poster` `agentic-lane` never implements) and nothing
+(`Source/Fn/Poster.rs`: the `Poster` `agito-lane` never implements) and nothing
 else. A run without a model - or with a corpus that does not load - passes `None`
 and drives on the rules alone; the startup line says which of the two happened.
 
 ## What this crate demonstrates
 
-`@agentic/nfsu-driver` is an adapter in everything including the `kind` field:
-it requires `agentic.browse`, provides `agentic.nfsu.drive`, keeps its
+`@agito/nfsu-driver` is an adapter in everything including the `kind` field:
+it requires `agito.browse`, provides `agito.nfsu.drive`, keeps its
 JavaScript in `Source/Script/Expressions/*.ts` compiled by `build.rs`, and is
-consumed by path so Agentic is never modified. The migration was the one field.
+consumed by path so Agito is never modified. The migration was the one field.

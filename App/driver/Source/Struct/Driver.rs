@@ -37,8 +37,8 @@ use std::{
 	time::Duration,
 };
 
-use AgenticLane::DecidePort;
-use AgenticSDK::{
+use ::Lane::DecidePort;
+use ::SDK::{
 	Adapter,
 	Browse,
 	Call,
@@ -68,7 +68,7 @@ use crate::{
 /// One constant rather than a literal in three places: the value reports it,
 /// the manifest names it, and `Serves` compares the two - so a copy that
 /// drifted would be a driver whose manifest is about a different crate.
-pub const Port:&str = "agentic.nfsu.drive";
+pub const Port:&str = "agito.nfsu.drive";
 
 /// The code a request this driver cannot read is reported with.
 ///
@@ -100,7 +100,7 @@ struct Run {
 	Throttle:bool,
 }
 
-/// One substrate behind `agentic.adapter`: the NFSU2 browser port, driven from
+/// One substrate behind `agito.adapter`: the NFSU2 browser port, driven from
 /// its own memory.
 pub struct Driver {
 	/// The browser session this adapter drives, as the port that owns it.
@@ -122,7 +122,7 @@ pub struct Driver {
 	/// The model, as the port that hides it, or `None` for a rules-only run.
 	///
 	/// The port rather than the corpus: selecting a lane, composing the body,
-	/// reading the reply and metering the spend are `agentic.lane.decide`'s,
+	/// reading the reply and metering the spend are `agito.lane.decide`'s,
 	/// and this adapter is a caller of them. Holding the trait object is
 	/// also what lets a test drive the tick from an answer it wrote, with
 	/// no corpus and no socket.

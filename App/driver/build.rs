@@ -1,12 +1,12 @@
 //! Compile `Source/Script/**/*.ts` into the JavaScript this crate sends.
 //!
-//! The rule lives in Agentic's `Build/Script.rs` and is reused by path, so this
-//! crate follows the same convention as `Crate/ChatDriver` and
+//! The rule lives in Agito's `Build/Script.rs` and is reused by path, so this
+//! crate follows the same convention as `Crate/Chat/Driver` and
 //! `Crate/Workflow`: one expression per file under
 //! `Source/Script/Expressions/`, the file is the thing an editor and a reader
 //! check, and Rust never builds JavaScript with `format!`.
 //!
-//! What differs is the compiler. Agentic erases type syntax with OXC because
+//! What differs is the compiler. Agito erases type syntax with OXC because
 //! its scripts carry annotations; every script here is written in the
 //! JavaScript subset, so the smallest transformation that makes TypeScript into
 //! JavaScript is the identity, and this build copies the bytes and records the

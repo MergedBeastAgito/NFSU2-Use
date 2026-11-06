@@ -116,7 +116,7 @@ where both readings agree.
 
 `#[panic_handler]` calls `unreachable()`, and the crate is built with
 `panic = "abort"`. A panic is therefore a wasm trap: the page catches a
-`RuntimeError`, the module's other exports still work, and the game's own
+`RunTimeError`, the module's other exports still work, and the game's own
 instance - a different module - never sees it. `panic_probe()` exists so that
 the containment can be watched on a live game rather than taken on faith.
 

@@ -22,7 +22,7 @@ stateDiagram-v2
 
 `Observing` is a single `Evaluate` that returns the car. `Deciding` is either
 the rule engine alone (`power = user`), the rule engine plus a model's opinion
-(`agentic`), or the model's answer alone (`model`). `Acting` holds keys through
+(`agito`), or the model's answer alone (`model`). `Acting` holds keys through
 an in-page 16 ms interval, so a tick costs one round trip rather than one per
 key.
 
@@ -58,8 +58,8 @@ threshold, and recorded otherwise.
 ```mermaid
 stateDiagram-v2
     [*] --> Rust
-    Rust --> Agentic: Browse::Evaluate
-    Agentic --> Page: CDP evaluate
+    Rust --> Agito: Browse::Evaluate
+    Agito --> Page: CDP evaluate
     Page --> Game: session.input.key(code, true) every 16 ms
     Game --> Memory: car state at car+0x60 / +0x40c / +0x430
     Memory --> Rust: returned as the value of the same Evaluate
@@ -67,7 +67,7 @@ stateDiagram-v2
 
 Nothing is injected through the DOM: the page's own input API writes the game's
 input ring, so a held key is a page-side interval and not a stream of CDP
-events. That is why Agentic needed no input verb, and why the whole loop is two
+events. That is why Agito needed no input verb, and why the whole loop is two
 `Evaluate` calls per tick - one to read, one to act.
 
 ---

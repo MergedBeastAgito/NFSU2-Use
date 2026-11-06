@@ -1,7 +1,7 @@
 //! The Lane crate's `Poster`, answered by this crate's transport.
 //!
-//! `agentic.lane.decide` states the endpoint once - the route
-//! `/ai/run/@cf/cloudflare/<name>` is [`AgenticLane::Request::Path`] - and then
+//! `agito.lane.decide` states the endpoint once - the route
+//! `/ai/run/@cf/cloudflare/<name>` is [`Lane::Request::Path`] - and then
 //! refuses to open a socket: what it asks of a caller is one request in and one
 //! reply body out, bounded by the caller's `Call`. This file is that answer for
 //! NFSU2, and it is the only file in this crate that reaches the network.
@@ -35,7 +35,7 @@
 //! `curl` is a child process and waits. The port's future must stay `Send` and
 //! must not park the executor, so the call runs on `spawn_blocking` and the
 //! caller's deadline and cancellation are raced against it. When there is no
-//! executor at all - a caller driving the future with `BlockOn` - the call runs
+//! executor at all - a caller driving the future with `Block` - the call runs
 //! on the only thread there is, because there is nothing to yield to.
 //!
 //! # The transport is a value, so the adapter is testable
@@ -54,8 +54,8 @@ use std::{
 	time::Instant,
 };
 
-use AgenticLane::{Failure, Poster, Request};
-use AgenticSDK::{Call, FutureBox};
+use ::Lane::{Failure, Poster, Request};
+use ::SDK::{Call, FutureBox};
 
 use crate::Fn::Cloudflare::{Account, Endpoint, Post, Token};
 

@@ -31,7 +31,7 @@ Documentation/Research/
 node_modules/
 
 # The game's own source, cloned for reference (not part of this repository)
-Module/
+Stem/
 
 # Credentials: the names travel in App/.env.example, the values never do.
 .env

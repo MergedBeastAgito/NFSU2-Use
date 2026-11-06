@@ -3,13 +3,13 @@ name = "nfsu-driver"
 version = "0.1.0"
 edition = "2024"
 publish = false
-description = "Drives the NFSU2 browser port from its own memory, through Agentic's browser port."
+description = "Drives the NFSU2 browser port from its own memory, through Agito's browser port."
 build = "build.rs"
 
-# The layout is Agentic's: a library named Agentic<Name> under Source/, a thin
+# The layout is Agito's: a library named Agito<Name> under Source/, a thin
 # binary beside it, and one expression per file under Source/Script.
 [lib]
-name = "AgenticNfsuDriver"
+name = "AgitoNfsuDriver"
 path = "Source/Library.rs"
 
 [[bin]]
@@ -18,24 +18,24 @@ path = "Source/Main.rs"
 
 # The facade is what a consumer names, and it is consumed as-is, never modified.
 # The path is relative, and it is the one assumption this crate makes about
-# where it sits: Agentic is checked out in the directory that holds the
+# where it sits: Agito is checked out in the directory that holds the
 # directory holding this repository. A clone that puts it elsewhere edits this
 # line or passes `--config`; nothing here names a machine.
 #
 # Two dependencies from this tree, and no internal package beside them - not
 # even for the `script!` macro this crate's expressions are baked with. The
-# macro comes through the facade (`pub use AgenticRuntime::script;`), which is
-# what makes the facade a facade: a consumer that had to name `agentic-runtime`
+# macro comes through the facade (`pub use RunTime::script;`), which is
+# what makes the facade a facade: a consumer that had to name `agito-runtime`
 # for one macro would still be pinned to the workspace's internal crate names.
 #
-# `agentic-lane` is the one crate the facade deliberately does not carry: it
+# `agito-lane` is the one crate the facade deliberately does not carry: it
 # re-exports the ports a consumer's browsing flow needs, and
-# `agentic.lane.decide` is named in `Crate/Sdk/Source/Library.rs` as
+# `agito.lane.decide` is named in `Crate/Sdk/Source/Library.rs` as
 # deliberately left out. A consumer that drives a decision model therefore
 # names the crate itself, from a path that sits beside the facade's.
 [dependencies]
-agentic-sdk = { path = "../../../../Agentic/Crate/SDK" }
-agentic-lane = { path = "../../../../Agentic/Crate/Lane" }
+agito-sdk = { path = "../../../../Agito/Crate/SDK" }
+agito-lane = { path = "../../../../Agito/Crate/Lane" }
 tokio = { version = "1", features = [
 	"rt-multi-thread",
 	"macros",

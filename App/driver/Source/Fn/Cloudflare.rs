@@ -2,7 +2,7 @@
 //!
 //! One POST, the credentials it carries, and the reply body it returned. What
 //! the body *means* is not decided here: the request is composed and the reply
-//! parsed by the Lane crate (`agentic.lane.decide`), which reaches a transport
+//! parsed by the Lane crate (`agito.lane.decide`), which reaches a transport
 //! only through its `Poster` seam. This file is the NFSU2 side of that seam -
 //! the token, curl, the status code - and it is the only file in this crate
 //! that opens a socket.

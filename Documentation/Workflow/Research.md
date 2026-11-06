@@ -172,7 +172,7 @@ that a conversation happened; the document is the decision itself.
 
 ## Never run the game's own tools
 
-`Module/*` is reference source, not a tool to execute. In particular
+`Stem/*` is reference source, not a tool to execute. In particular
 `nfsu2-web/web/tools/drive.mjs` calls `osascript -l JavaScript` to activate a
 macOS application by PID through AppKit:
 
@@ -185,7 +185,7 @@ With a stale or wrong PID that activates an arbitrary application on the person'
 desktop - it has already surfaced an About This Mac window. It is a desktop tool
 for the game's authors, not a browser tool, and it has no place in a task run.
 
-Read `Module/` freely. Never execute from it.
+Read `Stem/` freely. Never execute from it.
 
 ---
 
@@ -213,22 +213,20 @@ a card ends up waiting for an answer nobody was asked for.
 
 A raw capture is the accessibility tree: the sidebar, the account name, the mode
 buttons and the follow-up chips are all in it, and none of it is the answer.
-Every capture is formatted before it is kept:
+Every capture is formatted before it is kept, and the formatter is a verb of the
+workspace's own binary rather than a script beside it:
 
 ```sh
-~/.hermes/venvs/skills-python/bin/python \
-  ../Agentic/Scripts/FormatResearch.py \
-  Documentation/Research/<Topic>.md \
-  --thread <thread-id> --title "<title>" --project DELO --steps <n>
+agito chat --url <thread-url> --question "<question>" --format note
 ```
 
-The formatter lives in Agentic, not in the example: it is a house tool for every
-capture, so it belongs where every agent already looks.
-
-It writes YAML frontmatter (title, thread, project, kind, date, status, source,
-captured, segments, steps, sources), a metadata table, and a `## Transcript` with
-the chrome stripped - the shape the Agentic workspace's own `.hermes/research/*.md`
-files use, so the corpus reads as one thing rather than thirteen captures.
+The note it prints is the shape a kept capture has: YAML frontmatter (title,
+thread, project, kind, date, status, source, captured, segments, steps,
+sources), a metadata table, and a `## Transcript` with the chrome stripped - the
+same shape the Agito workspace's own research captures used, so the corpus reads
+as one thing rather than thirteen captures. Reading the page as Markdown rather
+than as rendered text is what keeps a formula as its TeX instead of as one glyph
+per line.
 
 ---
 

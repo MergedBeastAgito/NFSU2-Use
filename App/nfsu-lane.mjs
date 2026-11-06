@@ -169,7 +169,7 @@ function paint(force) {
   // means the model was never asked, and the column says which.
   const advice = D.modelAdvice;
   const pipe = window.__pipe || 'on';
-  const power = window.__power || 'agentic';
+  const power = window.__power || 'agito';
   set(cols.recv.pre, advice
     ? JSON.stringify(advice)
     : pipe === 'off'

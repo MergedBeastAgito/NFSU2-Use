@@ -1,29 +1,32 @@
 {
-	"name": "@agentic/nfsu-driver",
-	"kind": "adapter",
-	"version": "0.1.0",
-	"provides": {
-		"port": "agentic.nfsu.drive",
-		"errors": [
+	"Name": "@agito/nfsu-driver",
+	"Kind": "Adapter",
+	"Version": "0.1.0",
+	"Provide": {
+		"Port": "agito.nfsu.drive",
+		"Error": [
 			"browser-unavailable",
 			"navigation-failed",
 			"timeout",
 			"request-invalid"
 		]
 	},
-	"requires": {
-		"ports": ["agentic.browse", "agentic.lane.decide"]
+	"Require": {
+		"Port": [
+			"agito.browse",
+			"agito.lane.decide"
+		]
 	},
-	"artefact": {
-		"entry": "Target/release/nfsu-driver",
-		"hash": null,
-		"runtime": "rust>=1.88"
+	"Artefact": {
+		"Entry": "Target/release/nfsu-driver",
+		"Hash": null,
+		"RunTime": "rust>=1.88"
 	},
-	"state": "holds-transport",
-	"cost": {
-		"coldMs": 40,
-		"warmMs": 3,
-		"network": false
+	"State": "HoldTransport",
+	"Cost": {
+		"ColdMs": 40,
+		"WarmMs": 3,
+		"Network": false
 	},
-	"verify": "cargo run --release -- --attach <ws> --bind <target> --ticks 1"
+	"Verify": "cargo run --release -- --attach <ws> --bind <target> --ticks 1"
 }

@@ -175,14 +175,14 @@ for (const M of MODES) {
 
 // DRIVER - who makes the decision. One axis with three points, and the two
 // halves it turns on are named beside it rather than offered as their own
-// switches: Rules alone costs nothing, Model alone never falls back, Agentic is
+// switches: Rules alone costs nothing, Model alone never falls back, Agito is
 // the pair with the gate deciding which one wins.
 const POWERS = [
   {id:'user',    label:'Rules',   hint:'the rule engine alone - no model, no cost'},
-  {id:'agentic', label:'Agentic', hint:'the rules drive and the model argues; an answer replaces them only above the gate'},
+  {id:'agito', label:'Agito', hint:'the rules drive and the model argues; an answer replaces them only above the gate'},
   {id:'model',   label:'Model',   hint:'the model decides; the rules fill in only what it cannot perform'},
 ];
-window.__power = window.__power || 'agentic';
+window.__power = window.__power || 'agito';
 window.__pipe = window.__pipe || 'on';
 const powerEl = Group('DRIVER · who decides', 3, ColDrive);
 const powerBtns = {};
@@ -522,7 +522,7 @@ function paint() {
 
   // Every switch is read from the page on each paint, so a click in another tab
   // or a driver flipping one is reflected without a message passing system.
-  const Power = window.__power || 'agentic';
+  const Power = window.__power || 'agito';
   const Pipe = window.__pipe || 'on';
   const Sense = window.__mode || 'memory';
   const Key = Power + '|' + Pipe + '|' + Sense;

@@ -1,7 +1,7 @@
 //! One consultation: select a lane, ask about it, and read what came back into
 //! the four values the gate takes.
 //!
-//! The round trip is `agentic.lane.decide`'s - selection, composition, the
+//! The round trip is `agito.lane.decide`'s - selection, composition, the
 //! post, the typed answer and the meter all live there. What this file adds is
 //! the *reading* of that answer into this crate's vocabulary, and it exists
 //! because the two halves must not merge:
@@ -33,8 +33,8 @@
 //! it generically safe: a template that asks about urgency instead of
 //! confidence changes a number on the overlay and nothing the car does.
 
-use AgenticLane::{Answer, Answered, DecidePort, Selection, State as Reading};
-use AgenticSDK::Call;
+use ::Lane::{Answer, Answered, DecidePort, Selection, State as Reading};
+use ::SDK::Call;
 use serde_json::{Map, Value, json};
 
 /// What one answer said, as the gate's four values.

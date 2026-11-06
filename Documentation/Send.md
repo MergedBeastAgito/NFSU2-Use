@@ -40,7 +40,7 @@ typed question templates each of them serves, and
 the shapes.
 
 Selecting the lane, composing `{model, state, questions}` from it and reading
-the reply are `agentic.lane.decide`'s - the Lane crate, which does that for any
+the reply are `agito.lane.decide`'s - the Lane crate, which does that for any
 caller with a corpus. What stays here is the corpus itself, the rules that drive
 the car when the model is not asked, and the transport that posts the request.
 

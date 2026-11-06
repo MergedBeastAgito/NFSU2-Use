@@ -1,4 +1,4 @@
-//! `agentic.nfsu.reader`: the game's car state, read from inside the game's own
+//! `agito.nfsu.reader`: the game's car state, read from inside the game's own
 //! WebAssembly memory.
 //!
 //! A tick used to be an `Evaluate` round trip: a string of JavaScript crossed
@@ -33,7 +33,7 @@
 //!   against the page's own reader must read the game twice and accept only the
 //!   ticks where both reads agree - the physics runs on other threads.
 //! - A panic must not take the game down. [`Panic`] calls `unreachable()`, so a
-//!   panic is a trap: the page catches a `RuntimeError`, and the game's own
+//!   panic is a trap: the page catches a `RunTimeError`, and the game's own
 //!   instance never sees it. [`panic_probe`] exists to prove exactly that.
 //!
 //! The offsets are the port's own (`runtime/roam_game.c`, `local_state`, and
@@ -207,7 +207,7 @@ pub extern fn read_gear() -> i32 {
 pub extern fn read_car() -> u32 { Car() }
 
 /// A deliberate panic, for the containment test: the page must catch a
-/// `RuntimeError` and the game must keep running afterwards.
+/// `RunTimeError` and the game must keep running afterwards.
 #[unsafe(no_mangle)]
 pub extern fn panic_probe() -> i32 { None::<i32>.unwrap() }
 

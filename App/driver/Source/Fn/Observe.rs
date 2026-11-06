@@ -34,7 +34,7 @@
 //! array the page already returns. It is set only when a lead exists, so
 //! `lead_m` being absent is the same statement as "the road ahead is clear".
 
-use AgenticLane::State as Reading;
+use ::Lane::State as Reading;
 use serde_json::json;
 
 use crate::Struct::{Situation::Situation, State::Car};

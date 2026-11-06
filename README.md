@@ -1,7 +1,7 @@
-# NFSU2 Agentic
+# NFSU2 Agito
 
 Drives the browser port of Need for Speed: Underground 2 from the game's own
-memory, through Agentic's browser port. Two Rust crates do the work - a driver
+memory, through Agito's browser port. Two Rust crates do the work - a driver
 that holds the port, and a wasm reader that reads the game's memory from inside
 it - and a small JavaScript harness does the seeing and the showing.
 
@@ -24,7 +24,7 @@ assumed:
   position is read from a captured frame - one cyan cluster, filtered against
   the minimap corner and edge-hugging signage.
 
-Because the page injects its own input, Agentic needs no input verb: every step
+Because the page injects its own input, Agito needs no input verb: every step
 here is one `Evaluate`.
 
 ---
@@ -33,14 +33,14 @@ here is one `Evaluate`.
 
 ```
 App/                        the application: what runs
-  driver/                   the Rust crate (an extension beside Agentic)
+  driver/                   the Rust crate (an extension beside Agito)
     Source/Library.rs       crate doc, modules, re-exports
     Source/Main.rs          the composition root: one adapter, one loop
     Source/Fn/              Decide, Cloudflare, Expressions, Gate
     Source/Struct/          State, Decision, Policy, Driver, Mode, Situation
     Source/Script/Expressions  one .ts file per expression the page runs
     build.rs                compiles those scripts into OUT_DIR/Script
-    module.json             the manifest Agentic's vocabulary already reads
+    module.json             the manifest Agito's vocabulary already reads
     ADAPTER.md              the adapter surface, and what this crate does with it
   reader/                   the wasm reader: the car state, from inside the game
     Source/Library.rs       the module - no_std, no allocator, no stores
@@ -131,7 +131,7 @@ somebody's account in a public repository.
 Two switches live on the page, and any driver reads the same ones the person
 clicks:
 
-- **Power** - `user` (rules only, no model), `agentic` (rules drive, the model
+- **Power** - `user` (rules only, no model), `agito` (rules drive, the model
   argues), `model` (the model decides).
 - **Pipe** - `on` / `off`. Broken, no request is made at all, and the lane says
   `pipe broken` rather than implying the model was consulted.

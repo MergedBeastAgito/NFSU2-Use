@@ -71,7 +71,7 @@ How much more the port exposes has not been surveyed.
 ## The harness is JavaScript; the project runs Rust
 
 `nfsu-gui4.mjs`, `nfsu-drive4.mjs`, `nfsu-lane.mjs` and `nfsu-bus.mjs` are ESM.
-Agentic does not run TypeScript - its `Test` script is `cargo test --workspace`,
+Agito does not run TypeScript - its `Test` script is `cargo test --workspace`,
 and its only `.ts` files are page expressions baked into crates by `build.rs`.
 Node 22.23.0 does execute `.ts` directly by type stripping, so a port needs no
 build step, but it inherits nothing from the SDK.

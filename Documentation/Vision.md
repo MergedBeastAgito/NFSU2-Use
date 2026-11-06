@@ -6,7 +6,7 @@ NFSU2 is not the product. It is the smallest complete proof that the schema work
 
 ## What is actually being built
 
-An **Agentic schema** describes what can be observed and what can be decided. A
+An **Agito schema** describes what can be observed and what can be decided. A
 **custom library** - written against one target's own source - turns that schema
 into **insertions** that change the target. The schema is the contract; the
 library is the adapter; the target is an example.
@@ -24,9 +24,9 @@ the adapter.
 one memory space, one visual cue. It proves the loop: observe, decide, insert,
 observe the effect. It is the unit test.
 
-**TimeLine** - large, open, slow, mostly human. An agentic-and-human publishing
+**TimeLine** - large, open, slow, mostly human. An agito-and-human publishing
 operation: news extracted from Twitter and Facebook, modelled as interactions,
-hosted on SpacetimeDB. It has its own network layer that is not Agentic at all -
+hosted on SpacetimeDB. It has its own network layer that is not Agito at all -
 and could be. It proves the schema survives a target with no frame rate, no
 memory map and no single loop: a publishing pipeline where "insertion" means a
 draft, a queue entry or a published item.

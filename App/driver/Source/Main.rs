@@ -1,19 +1,19 @@
 //! The composition root: arguments in, one adapter, keys released on the way
 //! out.
 //!
-//! The browser is Agentic's, reached through `Browse`, and the driver is this
+//! The browser is Agito's, reached through `Browse`, and the driver is this
 //! crate's `Driver` - constructed once here, held as `Arc<dyn Adapter>`, and
-//! handed to the loop. That is the whole shape `agentic.adapter` exists for,
+//! handed to the loop. That is the whole shape `agito.adapter` exists for,
 //! and this file is the only place the two halves meet: every browser and
-//! runtime name it imports comes from `agentic-sdk`, the workspace's facade,
-//! and nothing it names belongs to a second Agentic crate.
+//! runtime name it imports comes from `agito-sdk`, the workspace's facade,
+//! and nothing it names belongs to a second Agito crate.
 //!
 //! Two things bound what the model may change, and both are flags, because a
 //! run that spends money should say how much it may spend before it starts.
 //! `--threshold` is how sure the model must be before its answer replaces the
 //! rules, and `--every` is how often it is asked at all. The run's own ceiling,
 //! requests and tokens, is `--max-requests` and `--max-tokens`, and it is the
-//! lane decider's meter (`agentic.lane.decide`), which is where the spend is
+//! lane decider's meter (`agito.lane.decide`), which is where the spend is
 //! counted now; the line it prints at exit is the invoice.
 //!
 //! The corpus is the other input a run cannot invent: `--corpus` names the
@@ -31,9 +31,9 @@
 
 use std::{sync::Arc, time::Duration};
 
-use AgenticLane::{Budget, DecidePort, Decider};
-use AgenticNfsuDriver::{Driver, OpenCorpus, Policy, ReaderWasm};
-use AgenticSDK::{Adapter, Browse, Call, Chrome, ChromeOptions, Clock, Create, Never, OpenOptions, Options, Tokio};
+use ::Lane::{Budget, DecidePort, Decider};
+use AgitoNfsuDriver::{Driver, OpenCorpus, Policy, ReaderWasm};
+use ::SDK::{Adapter, Browse, Call, Chrome, ChromeOptions, Clock, Create, Never, OpenOptions, Options, Tokio};
 
 /// One argument's value.
 fn Arg(Name:&str) -> Option<String> {
