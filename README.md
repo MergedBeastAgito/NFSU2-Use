@@ -124,6 +124,22 @@ and is never printed. The account id has no default either:
 `CLOUDFLARE_ACCOUNT_ID` is required, because a hard-coded one would ship
 somebody's account in a public repository.
 
+### Levanto Sage
+
+Sage takes the same `{model, state, questions}` body on its SystemOne route,
+`https://sage.levanto.ai/v1/systemone`, so it is a switch rather than a second
+client. Set `NFSU_DECIDER=sage`, put `SAGE_API_KEY` in the environment or the
+same dotenv file, and pass the model:
+
+```sh
+NFSU_DECIDER=sage ./target/release/nfsu-driver --attach "$WS" --bind <target-id> --model sage-latest --max-requests 40
+```
+
+The reply has no `{success, result}` envelope, so the transport adds one, and
+curl sends its own User-Agent because Sage refuses curl's default. The budget
+line still prices tokens at the `clef-flash` rate, because the price table lives
+in `agito-lane`.
+
 ---
 
 ## Power and pipe

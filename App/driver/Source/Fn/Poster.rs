@@ -57,7 +57,7 @@ use std::{
 use ::Lane::{Failure, Poster, Request};
 use ::SDK::{Call, FutureBox};
 
-use crate::Fn::Cloudflare::{Account, Endpoint, Post, Token};
+use crate::Fn::Cloudflare::{Account, Endpoint, Post, Sage, Token};
 
 /// What puts one request on the wire: the URL, the body, the token, and the
 /// reply body or a word saying why there is none.
@@ -188,7 +188,11 @@ impl Poster for HTTP {
 			let Some(Token) = self.Token.as_deref() else {
 				Keep(Wire { Send:Request.Text(), Recv:String::new(), Error:Some("no token".into()), Ms:0 });
 				return Err(Failure::Of("no token")
-					.With("CLOUDFLARE_API_TOKEN is unset and CLOUDFLARE_ENV_FILE names no token"));
+					.With(if Sage() {
+						"SAGE_API_KEY is unset and the dotenv file names no SAGE_API_KEY"
+					} else {
+						"CLOUDFLARE_API_TOKEN is unset and CLOUDFLARE_ENV_FILE names no token"
+					}));
 			};
 
 			let Path = Request.Path();
