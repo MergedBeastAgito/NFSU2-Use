@@ -66,7 +66,7 @@ the speed alone never fires on the car that needs it most.
 
 ## The escape has to be an option
 
-A question whose options are
+A question whose options stop at
 `steer_left | steer_right | throttle | brake | hold` cannot be answered "reverse
 out", however well the model understands the wall. The recovery question
 therefore carries `reverse_left` and `reverse_right` in place of `hold`, and its
