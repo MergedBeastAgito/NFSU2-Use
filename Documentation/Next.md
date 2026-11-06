@@ -1,15 +1,15 @@
 # Next
 
-What is still open in this application, and what was learned the hard way. Every
-line here is a thread that was started and deliberately left; nothing in this
-file is running.
+What is open in this application, with the measurement behind each. None of it
+runs in a tick.
 
 ---
 
 ## The steering gap
 
 **The car has no lateral input in free roam.** It holds a heading and a target
-speed until geometry intervenes, then the recovery rules turn it out of the wall.
+speed until geometry intervenes, then the recovery rules turn it out of the
+wall.
 
 Measured over one five-minute run: 1,497 ticks, `cruise` on 1,383 of them, and
 the cue was absent on 1,416. The only lateral observation in the corpus is
@@ -19,52 +19,48 @@ the 114 lateral actions in that run (`steer left` 48, `brake` 33,
 `reverse left` 33) all fired after the car was already blocked, stalled or
 creeping (35 non-moving ticks).
 
-What would fix it: a lateral reading that exists without a route. Candidates are
-the road band from a captured frame (already ingested as `road_band_motion`, but
-it is a scalar and carries no direction), the car's own yaw rate against the
-heading it is being held at, or the minimap. None of these has been measured yet.
+The signals that exist without a route: the road band from a captured frame,
+already ingested as `road_band_motion`, but a scalar that carries no direction;
+the car's own yaw rate against the heading it is being held at; the minimap.
+None of the three has been measured.
 
 ---
 
 ## Lane selection favours a question that cannot matter
 
-The corpus priority is `recover > race > corner > context > drive`. A nearby
-ghost car matches `context` / `traffic.ghost`, and in ghost free roam contact
-cannot happen, so the question has no consequence. Over one five-minute run the
-split was `context` 150, `drive` 65; over another, `context` 168, `drive` 33,
-`corner` 2.
+The lane order is `recover`, `race`, `corner`, `context`, `drive`, written as
+`select` conditions in `Templates/Questions.json`. A nearby ghost car matches
+`context` / `traffic.ghost`, and in ghost free roam contact cannot happen, so
+the question has no consequence. Over one five-minute run the split was
+`context` 150, `drive` 65; over another, `context` 168, `drive` 33, `corner` 2.
 
 The cost is not the money ($0.0033 per five minutes) but the attention: the
-model is asked about traffic instead of about the road. This is a corpus change
-in `Templates/Questions.json`, not a flag.
+model is asked about traffic instead of about the road. Lane selection is a
+corpus predicate, not a flag.
 
 ---
 
 ## The reader is a crate, not a reader
 
-`App/reader` builds a 516-byte `cdylib` that reads the car from inside the game's
-own shared memory, and nothing in the driving path uses it. The artifact is built
-and its path is resolved at startup, but no run instantiates it.
+`App/reader` builds a 516-byte `cdylib` that reads the car from inside the
+game's own shared memory, and nothing in the driving path uses it. The artefact
+is built and its path is resolved at startup, but no run instantiates it.
 
-The tick currently reads state through one `Evaluate` round trip of page-side
-JavaScript (`__readCar`). Wiring the wasm module would make a tick a handful of
-calls into the game's own heap instead of a string across CDP.
+The tick reads state through one `Evaluate` round trip of page-side JavaScript
+(`window.__drv.state()`).
 
 Build it with `cargo build --release` in `App/reader` - `.cargo/config.toml`
 carries the link flags and the reason for each.
 
 ---
 
-## Predicates and composable questions
+## Predicates and the field set
 
-The intent is that a predicate over the state selects a small typed question,
-and the questions compose - rather than every tick asking one broad question
-about everything.
-
-That work is blocked on the state inspection above: a predicate can only be
-written over a field that exists. `Templates/Observation.json` names 19 fields
-today, of which 3 are frame-derived and 16 are memory reads at known offsets.
-How much more the port exposes has not been surveyed.
+A predicate over the state selects the lane, and the lane names the templates it
+serves. What a predicate can say is bounded by the field set:
+`Templates/Observation.json` names 19 fields today, of which 3 are frame-derived
+and 16 are memory reads at known offsets. How much more the port exposes has not
+been surveyed.
 
 ---
 
@@ -78,7 +74,7 @@ build step, but it inherits nothing from the SDK.
 
 ---
 
-## What the overlay now is
+## The overlay
 
 - `DECISIONS` is a three-column panel: candidates and the driving line, then
   `MODE` and `DRIVER`, then `SENSE`, `WIRE` and `TUNING`.
@@ -86,11 +82,12 @@ build step, but it inherits nothing from the SDK.
   history (grey) - built once and written into, never rebuilt. A pooled node
   survives a request; that is the property the panel exists for.
 - The `TUNING` knobs are the page harness's own and do not steer the Rust
-  driver, which takes `--target`, `--every` and `--threshold`. The label says so.
+  driver, which takes `--target`, `--every` and `--threshold`. The label says
+  so.
 
 ---
 
-## Traps worth keeping
+## Traps
 
 - **The whole overlay is one template literal.** A backtick anywhere inside it -
   including in a `//` comment - ends the template early and breaks the file. A

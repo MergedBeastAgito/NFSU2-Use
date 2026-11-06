@@ -14,17 +14,18 @@ stateDiagram-v2
     Observing --> Deciding: state read (one Evaluate)
     Deciding --> Acting: decision made
     Acting --> Observing: keys held for this tick
-    Acting --> Recovering: speed < 2 km/h x3
+    Acting --> Recovering: blocked or stalled for three ticks
     Recovering --> Observing: back-out complete
     Observing --> Releasing: tick budget reached
     Releasing --> [*]
 ```
 
-`Observing` is a single `Evaluate` that returns the car. `Deciding` is either
-the rule engine alone (`power = user`), the rule engine plus a model's opinion
-(`agito`), or the model's answer alone (`model`). `Acting` holds keys through
-an in-page 16 ms interval, so a tick costs one round trip rather than one per
-key.
+`Observing` is a single `Evaluate` that returns the car. `Deciding` has three
+points in the page harness: `power = user` is the rule engine alone, `agito` is
+the rules with a model's answer replacing them above the gate, and `model` is
+the model alone. The Rust driver runs `agito`. `Acting` writes a goal the page
+applies through a 16 ms interval, so a cruise tick sends one goal rather than
+one key at a time; a manoeuvre holds its keys directly.
 
 ---
 
@@ -49,7 +50,8 @@ stateDiagram-v2
 The important edge is `Awaiting --> LocalOnly`: **every** failure falls back to
 the rules, because a model that is slow, rate-limited or wrong must not stop a
 car doing 40 km/h. `Gated` is the other half: an answer is obeyed only above a
-threshold, and recorded otherwise.
+threshold, only when the word names a key the driver can perform, and never
+during a manoeuvre; everything else is recorded.
 
 ---
 
@@ -67,8 +69,8 @@ stateDiagram-v2
 
 Nothing is injected through the DOM: the page's own input API writes the game's
 input ring, so a held key is a page-side interval and not a stream of CDP
-events. That is why Agito needed no input verb, and why the whole loop is two
-`Evaluate` calls per tick - one to read, one to act.
+events. That is why Agito needed no input verb, and why the whole loop is three
+`Evaluate` calls per tick - one to read, one to act, one to publish.
 
 ---
 
@@ -77,17 +79,18 @@ events. That is why Agito needed no input verb, and why the whole loop is two
 Each lane is a state, not a request: the fields a question reads, and nothing
 else.
 
-| lane      | fields                                            | when                   |
-| --------- | ------------------------------------------------- | ---------------------- |
-| `drive`   | speed_kmh, gear, route_cue_x                      | every tick             |
-| `corner`  | speed_kmh, heading_degrees, route_cue_x, yaw_rate | approaching a turn     |
-| `recover` | speed_kmh, gear, grounded, surface                | stuck or slipping      |
-| `race`    | speed_kmh, gear, racetype, track, route_cue_x     | racetype 1 or 7        |
-| `context` | the full sixteen                                  | judgement, not control |
+| lane      | fields                                                                                                    | when                                                      |
+| --------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `drive`   | speed_kmh, gear, heading_degrees, route_cue_x, verdict, situation, moved_m, turned_degrees, blocked_ticks | every tick                                                |
+| `corner`  | speed_kmh, heading_degrees, route_cue_x, yaw_rate                                                         | a turn above 12 degrees, outside a race                   |
+| `recover` | verdict, situation, speed_kmh, gear, moved_m, turned_degrees, blocked_ticks, grounded, surface            | blocked or stalled                                        |
+| `race`    | speed_kmh, gear, racetype, track, route_cue_x                                                             | racetype above 0 (1 a race, 7 an outrun) or a career race |
+| `context` | speed_kmh, gear, heading_degrees, position, velocity, route_cue_x, route_cue_pixels, road_band_motion     | a lead car within 60 m, outside a race                    |
 
-Measured on `clef-flash` with the same question: 375 input tokens for `drive`,
-499 for `context`. The lanes buy tokens and honesty about what each question
-reads; speed comes from cadence, not from a smaller body.
+Measured on `clef-flash` with the same question: 375 input tokens for a
+three-field lane, 499 for the full sixteen. The lanes buy tokens and honesty
+about what each question reads; speed comes from cadence, not from a smaller
+body.
 
 ---
 
@@ -109,6 +112,5 @@ rules keep the car.
 
 `Templates/` is data, not code: `Observation.json` names the fields and their
 addresses, `Questions.json` names the lanes and the typed questions. A driver
-reads them at runtime, so a template can be changed without rebuilding the crate
-
-- which is the point of keeping them out of the binary.
+reads them at runtime, so a template can be changed without rebuilding the
+crate - which is the point of keeping them out of the binary.
