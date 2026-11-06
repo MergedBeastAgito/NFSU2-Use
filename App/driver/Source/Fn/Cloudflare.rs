@@ -64,10 +64,30 @@ const Host:&str = "https://api.cloudflare.com/client/v4/accounts/";
 /// while the path is the capability's: `/ai/run/@cf/cloudflare/<name>`, which
 /// the Lane crate states once so two callers cannot disagree about which route
 /// a decision model is asked on.
-pub fn Endpoint(Account:&str, Path:&str) -> String { format!("{Host}{Account}{Path}") }
+pub fn Endpoint(Account:&str, Path:&str) -> String {
+	if Sage() {
+		return SageURL.to_string();
+	}
+	format!("{Host}{Account}{Path}")
+}
+
+/// Levanto Sage's SystemOne route takes the same `{model, state, questions}` body,
+/// so `NFSU_DECIDER=sage` swaps the endpoint and the credential and nothing else.
+const SageURL:&str = "https://sage.levanto.ai/v1/systemone";
+
+/// Sage rejects curl's default User-Agent.
+const SageAgent:&str = "nfsu-driver/0.1";
+
+pub fn Sage() -> bool { env::var("NFSU_DECIDER").as_deref() == Ok("sage") }
 
 /// The account id, when the environment carries one.
-pub fn Account() -> Option<String> { env::var("CLOUDFLARE_ACCOUNT_ID").ok().filter(|Account| !Account.is_empty()) }
+pub fn Account() -> Option<String> {
+	// Sage's route carries no account, so a placeholder keeps `HTTP::Ready` true.
+	if Sage() {
+		return Some("sage".into());
+	}
+	env::var("CLOUDFLARE_ACCOUNT_ID").ok().filter(|Account| !Account.is_empty())
+}
 
 /// The token, from the environment first and the named dotenv file second.
 ///
@@ -76,9 +96,15 @@ pub fn Account() -> Option<String> { env::var("CLOUDFLARE_ACCOUNT_ID").ok().filt
 /// there is no file to read and no error to raise - the caller reports "no
 /// token" and the tick carries on.
 pub fn Token() -> Option<String> {
+	if Sage() {
+		return env::var("SAGE_API_KEY")
+			.ok()
+			.or_else(|| FromDotEnv("SAGE_API_KEY="))
+			.filter(|Token| !Token.is_empty());
+	}
 	env::var("CLOUDFLARE_API_TOKEN")
 		.ok()
-		.or_else(FromDotEnv)
+		.or_else(|| FromDotEnv("CLOUDFLARE_API_TOKEN="))
 		.filter(|Token| !Token.is_empty())
 }
 
@@ -117,7 +143,9 @@ pub fn Header(Token:&str) -> Result<String, String> {
 /// after the move as it did before it.
 pub fn Post(URL:&str, Body:&str, Token:&str) -> Result<String, String> {
 	let Line = Header(Token)?;
+	let Agent:&[&str] = if Sage() { &["-A", SageAgent] } else { &[] };
 	let mut Child = Command::new("curl")
+		.args(Agent)
 		.args([
 			"-s",
 			"--max-time",
@@ -165,6 +193,10 @@ pub fn Post(URL:&str, Body:&str, Token:&str) -> Result<String, String> {
 	if Code != 200 {
 		return Err(format!("http {Code}"));
 	}
+	// Cloudflare wraps the answers in `{success, result}`; Sage returns them bare.
+	if Sage() {
+		return Ok(format!("{{\"success\":true,\"result\":{Payload}}}"));
+	}
 	Ok(Payload.to_string())
 }
 
@@ -182,11 +214,11 @@ pub fn EnvFile() -> PathBuf {
 }
 
 /// The token from the dotenv file [`EnvFile`] resolves.
-fn FromDotEnv() -> Option<String> {
+fn FromDotEnv(Key:&str) -> Option<String> {
 	let Text = fs::read_to_string(EnvFile()).ok()?;
 	Text.lines()
 		.find_map(|Line| {
-			Line.strip_prefix("CLOUDFLARE_API_TOKEN=")
+			Line.strip_prefix(Key)
 				.map(|Value| Value.trim().trim_matches('"').to_string())
 		})
 		.filter(|Token| !Token.is_empty())
